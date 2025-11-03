@@ -3,10 +3,8 @@
 // Bot Telegram – Nikolaii
 // =============================
 
-// ⚠️ Garder ces constantes telles quelles (fournies par l'utilisateur)
-define('BOT_TOKEN', '8053196328:AAFgAAMgHUNrFyBBjm8S_98QC5eWv91p-DA');
-define('CHAT_ID', '922057959');
-define('CURRENCY', 'FCFA');
+// Include configuration file for sensitive data
+require_once 'config.php';
 
 class Nikolaii {
     private array $messages = [
