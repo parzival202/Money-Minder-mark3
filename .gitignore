@@ -1,1 +1,3 @@
 config.php
+data/app.db
+data.sqlite
