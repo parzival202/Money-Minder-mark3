@@ -464,17 +464,17 @@ composer test:coverage
 
 ### 🎯 Roadmap et Fonctionnalités Futures
 
-#### Version 3.1 (Q1 2024)
+#### Version 3.1 (Q1 2026)
 - [ ] Synchronisation multi-appareils
 - [ ] Export PDF des rapports
 - [ ] Mode hors ligne
 
-#### Version 3.2 (Q2 2024)
+#### Version 3.2 (Q2 2026)
 - [ ] Intelligence artificielle pour prédictions
 - [ ] Intégration bancaires automatiques
 - [ ] Mode multi-utilisateurs
 
-#### Version 4.0 (2024)
+#### Version 4.0 (2026)
 - [ ] Application mobile native
 - [ ] API GraphQL
 - [ ] Microservices architecture
