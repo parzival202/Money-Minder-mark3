@@ -1,0 +1,4 @@
+#AuthType Basic
+#AuthName "Accès Restreint"
+#AuthUserFile "C:\xampp\htdocs\dashboard\moneyminders\.htpasswd"
+#Require valid-user
