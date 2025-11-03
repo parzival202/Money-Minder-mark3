@@ -174,12 +174,14 @@ define('ANNUAL_SAVING_GOAL', 600000);  // Objectif épargne annuel
 
 Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 
-## 🙏 Remerciements
+## 🙏 Mention spéciale
 
 - Interface inspirée des meilleures pratiques UX/UI
 - Icônes Font Awesome
 - Framework Bootstrap
 - Bibliothèque Chart.js
+- ChatGPT
+-BlackBox Ai
 
 ---
 
