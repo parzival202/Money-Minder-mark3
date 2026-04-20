@@ -82,7 +82,19 @@ function init_db() {
         key TEXT PRIMARY KEY,
         value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS debts (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        label        TEXT    NOT NULL,
+        total_amount REAL    NOT NULL DEFAULT 0,
+        amount_paid  REAL    NOT NULL DEFAULT 0,
+        note         TEXT    DEFAULT '',
+        status       TEXT    NOT NULL DEFAULT 'active',
+        created_at   TEXT    DEFAULT (datetime('now'))
+    );
     ";
+
 
     // Exécute toutes les commandes
     $pdo->exec($sql);
@@ -450,6 +462,35 @@ function calculateCategoryExpenses($category, $user_id = null) {
     return (float)($row['total'] ?? 0);
 }
 
+// ── Debts ─────────────────────────────────────────────────────────
+
+function fetchDebts($user_id) {
+    global $pdo;
+    $stmt = $pdo->prepare("SELECT * FROM debts WHERE user_id = ? ORDER BY status ASC, created_at DESC");
+    $stmt->execute([$user_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function insertDebt($user_id, $label, $total_amount, $note = '') {
+    global $pdo;
+    $stmt = $pdo->prepare("INSERT INTO debts (user_id, label, total_amount, amount_paid, note) VALUES (?, ?, ?, 0, ?)");
+    $stmt->execute([$user_id, $label, $total_amount, $note]);
+    return $pdo->lastInsertId();
+}
+
+function addDebtPayment($debt_id, $payment_amount) {
+    global $pdo;
+    $stmt = $pdo->prepare("UPDATE debts SET amount_paid = MIN(amount_paid + ?, total_amount) WHERE id = ?");
+    $stmt->execute([$payment_amount, $debt_id]);
+    $pdo->prepare("UPDATE debts SET status = 'settled' WHERE id = ? AND amount_paid >= total_amount")
+        ->execute([$debt_id]);
+}
+
+function deleteDebt($debt_id) {
+    global $pdo;
+    $pdo->prepare("DELETE FROM debts WHERE id = ?")->execute([$debt_id]);
+}
+
 // Helper function to get previous month's savings for a user
 function getPreviousMonthSavings($user_id) {
     global $pdo;
@@ -471,3 +512,4 @@ function getPreviousMonthSavings($user_id) {
     // If no archive found, fallback to 0
     return 0;
 }
+

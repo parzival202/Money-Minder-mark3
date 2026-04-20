@@ -42,10 +42,10 @@ if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
         global $pdo;
         $stmt = $pdo->prepare("SELECT * FROM expenses WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date DESC, id DESC");
         $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
-        $expenses_arc   = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $budgets_arc    = getBudgets($user_id);
-        $total_arc      = 0;
-        $savings_arc    = $budgets_arc['Épargne'] ?? 0;
+        $expenses_arc = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $budgets_arc  = getBudgets($user_id);
+        $total_arc    = 0;
+        $savings_arc  = $budgets_arc['Épargne'] ?? 0;
         foreach ($expenses_arc as $e) $total_arc += floatval($e['amount']);
 
         saveArchive($user_id, $cycle_label, ['budgets' => $budgets_arc, 'expenses' => $expenses_arc], $total_arc);
@@ -57,11 +57,10 @@ if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
         $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
 
         $month_label = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
-        $emojis      = ['🎉','📦','✅','📖','🥳'];
-        $emoji       = $emojis[array_rand($emojis)];
-        $msgs        = [
-            "Mois archivé ! $month_label : " . formatCurrency($total_arc) . " dépensés, " . formatCurrency($savings_arc) . " épargnés. $emoji",
-            "C'est dans la boîte ! $month_label archivé. Dépenses : " . formatCurrency($total_arc) . ", Épargne : " . formatCurrency($savings_arc) . ". $emoji",
+        $emojis = ['🎉','📦','✅','📖','🥳'];
+        $msgs = [
+            "Mois archivé ! $month_label : " . formatCurrency($total_arc) . " dépensés, " . formatCurrency($savings_arc) . " épargnés. " . $emojis[array_rand($emojis)],
+            "C'est dans la boîte ! $month_label archivé. Dépenses : " . formatCurrency($total_arc) . ", Épargne : " . formatCurrency($savings_arc) . ". " . $emojis[array_rand($emojis)],
         ];
         $__nikolaii->sendMessage($msgs[array_rand($msgs)]);
     }
@@ -73,7 +72,7 @@ if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (isset($_POST['delete_budget_category'])) {
-        $cat     = $_POST['delete_budget_category'];
+        $cat = $_POST['delete_budget_category'];
         $budgets = getBudgets($user_id);
         if (isset($budgets[$cat])) {
             global $pdo;
@@ -85,8 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['rename_budget_category'])) {
-        $old     = trim($_POST['old_category_name']);
-        $new     = trim($_POST['new_category_name']);
+        $old = trim($_POST['old_category_name']);
+        $new = trim($_POST['new_category_name']);
         $budgets = getBudgets($user_id);
         if ($old !== '' && $new !== '' && isset($budgets[$old])) {
             global $pdo;
@@ -102,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $new_cat = trim($_POST['new_budget_category']);
         $new_amt = floatval($_POST['new_budget_amount']);
         if ($new_cat !== '' && $new_amt > 0) {
-            $budgets           = getBudgets($user_id);
+            $budgets = getBudgets($user_id);
             $budgets[$new_cat] = $new_amt;
             setBudgets($user_id, $budgets);
         }
@@ -175,9 +174,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['archive_current_month'])) {
-        $start       = (new DateTime())->modify('first day of this month')->modify('-1 month')
-                        ->setDate((new DateTime())->format('Y'), (new DateTime())->format('m') - 1 <= 0 ? 12 : (new DateTime())->format('m') - 1, 27);
-        $end         = (new DateTime())->setDate((new DateTime())->format('Y'), (new DateTime())->format('m'), 26);
+        $start = (new DateTime())->modify('first day of this month')->modify('-1 month')
+                    ->setDate((new DateTime())->format('Y'), (new DateTime())->format('m') - 1 <= 0 ? 12 : (new DateTime())->format('m') - 1, 27);
+        $end   = (new DateTime())->setDate((new DateTime())->format('Y'), (new DateTime())->format('m'), 26);
         $cycle_label = $end->format('Y-m');
 
         $existing_archives = fetchArchives($user_id);
@@ -197,7 +196,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($expenses_cycle as $e) $total_cycle += floatval($e['amount']);
 
             saveArchive($user_id, $cycle_label, ['budgets' => $budgets_snapshot, 'expenses' => $expenses_cycle], $total_cycle);
-
             foreach ($budgets_snapshot as $cat => &$amt) { if ($cat !== 'Épargne') $amt = 0; }
             setBudgets($user_id, $budgets_snapshot);
 
@@ -205,15 +203,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
 
             $month_label = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
-            $emojis      = ['🎉','📦','✅','📖','🥳'];
-            $emoji       = $emojis[array_rand($emojis)];
-            $msgs        = ["Mois archivé ! $month_label : " . formatCurrency($total_cycle) . " dépensés, " . formatCurrency($savings_cycle) . " épargnés. $emoji"];
-            $__nikolaii->sendMessage($msgs[0]);
+            $emojis = ['🎉','📦','✅','📖','🥳'];
+            $__nikolaii->sendMessage("Mois archivé ! $month_label : " . formatCurrency($total_cycle) . " dépensés, " . formatCurrency($savings_cycle) . " épargnés. " . $emojis[array_rand($emojis)]);
 
             header('Location: ' . $_SERVER['PHP_SELF'] . '?archived=1'); exit;
         } else {
             header('Location: ' . $_SERVER['PHP_SELF'] . '?already_archived=1'); exit;
         }
+    }
+
+    // ── Dettes ──────────────────────────────────────────────
+    if (isset($_POST['add_debt'])) {
+        $label        = trim($_POST['debt_label']);
+        $total_amount = floatval($_POST['debt_total_amount']);
+        $note         = trim($_POST['debt_note'] ?? '');
+        if ($label !== '' && $total_amount > 0) {
+            insertDebt($user_id, $label, $total_amount, $note);
+        }
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?debt_added=1&tab=debts'); exit;
+    }
+
+    if (isset($_POST['pay_debt'])) {
+        $debt_id        = intval($_POST['debt_id']);
+        $payment_amount = floatval($_POST['payment_amount']);
+        $payment_date   = $_POST['payment_date'] ?: date('Y-m-d');
+
+        if ($debt_id > 0 && $payment_amount > 0) {
+            global $pdo;
+            $row = $pdo->prepare("SELECT label FROM debts WHERE id = ?");
+            $row->execute([$debt_id]);
+            $debt  = $row->fetch(PDO::FETCH_ASSOC);
+            $label = $debt ? $debt['label'] : 'Remboursement';
+
+            $budgets = getBudgets($user_id);
+            if (!isset($budgets['Remboursement'])) {
+                $budgets['Remboursement'] = 0;
+                setBudgets($user_id, $budgets);
+            }
+
+            insertExpense($user_id, [
+                'date'        => $payment_date,
+                'category'    => 'Remboursement',
+                'description' => 'Remboursement — ' . $label,
+                'amount'      => $payment_amount,
+            ]);
+            addDebtPayment($debt_id, $payment_amount);
+        }
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?debt_paid=1&tab=debts'); exit;
+    }
+
+    if (isset($_POST['delete_debt'])) {
+        deleteDebt(intval($_POST['delete_debt']));
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?debt_deleted=1&tab=debts'); exit;
+    }
+
+    // ── Objectifs épargne ────────────────────────────────────
+    if (isset($_POST['update_goals'])) {
+        if (isset($_POST['goals'])) setSavingGoals($user_id, $_POST['goals']);
+        header("Location: " . $_SERVER['PHP_SELF'] . "?goals_updated=1&tab=savings"); exit();
     }
 }
 
@@ -224,13 +271,14 @@ $expenses = fetchExpenses($user_id);
 $budgets  = getBudgets($user_id);
 if (!isset($budgets['Épargne'])) { $budgets['Épargne'] = 50000; setBudgets($user_id, $budgets); }
 $alerts   = fetchAlerts($user_id);
+$debts    = fetchDebts($user_id);
 
 // Dépenses de la semaine
 $weekDays     = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 $weekExpenses = array_fill(0, 7, 0);
-$today        = new DateTime();
-$monday       = clone $today;
-if ($today->format('N') != 1) $monday->modify('last monday');
+$today_dt     = new DateTime();
+$monday       = clone $today_dt;
+if ($today_dt->format('N') != 1) $monday->modify('last monday');
 for ($i = 0; $i < 7; $i++) {
     $d = (clone $monday)->modify("+{$i} days")->format('Y-m-d');
     foreach ($expenses as $e) {
@@ -239,9 +287,9 @@ for ($i = 0; $i < 7; $i++) {
 }
 
 // Calculs de base
-$total_expenses   = array_sum(array_column($expenses, 'amount'));
-$remaining_budget = array_sum($budgets) - $total_expenses;
-$daily_average    = date('j') > 0 ? $total_expenses / date('j') : 0;
+$total_expenses     = array_sum(array_column($expenses, 'amount'));
+$remaining_budget   = array_sum($budgets) - $total_expenses;
+$daily_average      = date('j') > 0 ? $total_expenses / date('j') : 0;
 $savings_percentage = ($remaining_budget > 0 && defined('MONTHLY_SAVING_GOAL') && MONTHLY_SAVING_GOAL > 0)
     ? ($remaining_budget / MONTHLY_SAVING_GOAL) * 100 : 0;
 
@@ -250,7 +298,6 @@ $monthly_budget      = floatval(getMeta('monthly_budget'));
 $budget_used_percent = $monthly_budget > 0 ? min(($total_expenses / $monthly_budget) * 100, 100) : 0;
 $bar_color           = $budget_used_percent < 60 ? 'bg-success' : ($budget_used_percent < 85 ? 'bg-warning' : 'bg-danger');
 
-// Bannière contextuelle
 if ($budget_used_percent >= 100) {
     $banner_type    = 'danger';
     $banner_icon    = 'fa-triangle-exclamation';
@@ -260,16 +307,14 @@ if ($budget_used_percent >= 100) {
     $banner_icon    = 'fa-bell';
     $banner_message = 'Attention : ' . number_format($budget_used_percent, 1) . '% du budget consommé. Il te reste ' . formatCurrency($monthly_budget - $total_expenses) . '.';
 } else {
-    $banner_type    = null;
-    $banner_message = null;
-    $banner_icon    = null;
+    $banner_type = $banner_icon = $banner_message = null;
 }
 
-// Indicateur de cycle
-$now_c         = new DateTime();
-$day_c         = (int)$now_c->format('d');
-$mon_c         = (int)$now_c->format('m');
-$yr_c          = (int)$now_c->format('Y');
+// Cycle indicator
+$now_c = new DateTime();
+$day_c = (int)$now_c->format('d');
+$mon_c = (int)$now_c->format('m');
+$yr_c  = (int)$now_c->format('Y');
 if ($day_c >= 27) {
     $cycle_start = new DateTime("{$yr_c}-{$mon_c}-27");
 } else {
@@ -292,7 +337,6 @@ foreach ($budgets as $cat => $budget) {
 }
 uasort($cat_spending, fn($a, $b) => $b['spent'] <=> $a['spent']);
 $top3 = array_slice($cat_spending, 0, 3, true);
-// ── Fin variables dashboard ───────────────────────────────────
 
 // Objectifs d'épargne
 function getSavingGoals($user_id) {
@@ -306,10 +350,6 @@ function setSavingGoals($user_id, $goals) {
     global $pdo;
     $pdo->prepare("REPLACE INTO meta (key, value) VALUES (?, ?)")->execute(["saving_goals_" . $user_id, json_encode($goals)]);
 }
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_goals'])) {
-    if (isset($_POST['goals'])) setSavingGoals($user_id, $_POST['goals']);
-    header("Location: " . $_SERVER['PHP_SELF'] . "?goals_updated=1&tab=savings"); exit();
-}
 $saving_goals = getSavingGoals($user_id);
 
 // Couleurs graphiques
@@ -322,9 +362,9 @@ foreach (array_keys($budgets) as $cat) {
     else { $chartColors[] = $diverseColors[$colorIndex % count($diverseColors)]; $colorIndex++; }
 }
 
-// Savings badge color
-$previous_savings = getPreviousMonthSavings($user_id);
-$current_savings  = $budgets['Épargne'] ?? 0;
+// Badge épargne
+$previous_savings    = getPreviousMonthSavings($user_id);
+$current_savings     = $budgets['Épargne'] ?? 0;
 $savings_badge_class = 'bg-success';
 if ($current_savings < $previous_savings) {
     $ratio = ($previous_savings - $current_savings) / max($previous_savings, 1);
@@ -344,63 +384,40 @@ if ($current_savings < $previous_savings) {
     <script src="expenses_filters.js"></script>
     <style>
         :root {
-            --primary: #6D28D9; --secondary: #F472B6;
-            --success: #60A5FA; --danger: #e74c3c;
-            --warning: #f39c12; --light: #EEF2FF; --dark: #6B46C1;
+            --primary:#6D28D9; --secondary:#F472B6;
+            --success:#60A5FA; --danger:#e74c3c;
+            --warning:#f39c12; --light:#EEF2FF; --dark:#6B46C1;
         }
-        body { background: #EEF2FF; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-
-        /* ── Header ── */
-        header { background: #fff; }
-
-        /* ── Cards ── */
-        .card { border: none; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.08); margin-bottom: 20px; transition: box-shadow .3s, transform .3s; }
-        .card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.14); transform: translateY(-4px); }
-        .stat-card { text-align: center; padding: 20px; }
-        .stat-value { font-size: 1.8rem; font-weight: 700; margin: 10px 0; color: #1f2937; }
-        .stat-label { font-weight: 600; color: #6b7280; font-size: .85rem; margin-bottom: 4px; }
-
-        /* ── Nav tabs ── */
-        .nav-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
-        .nav-tabs::-webkit-scrollbar { display: none; }
-        .nav-item { flex-shrink: 0; }
-
-        /* ── Charts ── */
-        .chart-container, .small-chart-container, .evolution-chart-container { position: relative; height: 280px; width: 100%; }
-
-        /* ── Progress bars ── */
-        .progress-bar { border-radius: 8px; transition: width .6s ease; }
-        .savings-progress { height: 20px; border-radius: 10px; }
-
-        /* ── Floating button ── */
-        .btn-floating {
-            position: fixed; bottom: 24px; right: 24px;
-            border-radius: 14px; z-index: 1060;
-            box-shadow: 0 6px 18px rgba(109,40,217,.4);
-            transition: box-shadow .3s, transform .2s;
-        }
-        .btn-floating:hover { box-shadow: 0 10px 28px rgba(109,40,217,.5); transform: translateY(-2px); }
-
-        /* ── Misc ── */
-        .rounded-dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
-        .goal-card { border-radius: 10px; transition: transform .3s, box-shadow .3s; }
-        .goal-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.1); }
-
-        /* ── Responsive ── */
-        @media (max-width: 768px) {
-            .stat-value { font-size: 1.25rem; }
-            .stat-card { padding: 14px; }
-            .chart-container, .small-chart-container, .evolution-chart-container { height: 200px; }
-            .btn-floating { bottom: 16px; right: 16px; font-size: .85rem; }
-            header img { height: 44px !important; }
+        body { background:#EEF2FF; font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; }
+        header { background:#fff; }
+        .card { border:none; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,.08); margin-bottom:20px; transition:box-shadow .3s,transform .3s; }
+        .card:hover { box-shadow:0 8px 24px rgba(0,0,0,.14); transform:translateY(-4px); }
+        .stat-card { text-align:center; padding:20px; }
+        .stat-value { font-size:1.8rem; font-weight:700; margin:10px 0; color:#1f2937; }
+        .stat-label { font-weight:600; color:#6b7280; font-size:.85rem; margin-bottom:4px; }
+        .nav-tabs { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+        .nav-tabs::-webkit-scrollbar { display:none; }
+        .nav-item { flex-shrink:0; }
+        .chart-container,.small-chart-container,.evolution-chart-container { position:relative; height:280px; width:100%; }
+        .progress-bar { border-radius:8px; transition:width .6s ease; }
+        .savings-progress { height:20px; border-radius:10px; }
+        .btn-floating { position:fixed; bottom:24px; right:24px; border-radius:14px; z-index:1060; box-shadow:0 6px 18px rgba(109,40,217,.4); transition:box-shadow .3s,transform .2s; }
+        .btn-floating:hover { box-shadow:0 10px 28px rgba(109,40,217,.5); transform:translateY(-2px); }
+        .rounded-dot { display:inline-block; width:12px; height:12px; border-radius:50%; }
+        .goal-card { border-radius:10px; transition:transform .3s,box-shadow .3s; }
+        .goal-card:hover { transform:translateY(-3px); box-shadow:0 8px 20px rgba(0,0,0,.1); }
+        @media (max-width:768px) {
+            .stat-value { font-size:1.25rem; }
+            .stat-card { padding:14px; }
+            .chart-container,.small-chart-container,.evolution-chart-container { height:200px; }
+            .btn-floating { bottom:16px; right:16px; font-size:.85rem; }
+            header img { height:44px !important; }
         }
     </style>
 </head>
 <body>
 
-<!-- ════════════════════════════════════════════
-     NOTIFICATIONS TOAST
-     ════════════════════════════════════════════ -->
+<!-- TOASTS -->
 <div id="toast-container" style="position:fixed;top:1rem;right:1rem;z-index:1100;"></div>
 <script>
 function showToast(msg, type = 'success') {
@@ -421,12 +438,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (p.has('budgets_updated')) showToast('Budgets mis à jour.');
     if (p.has('alerts_cleared'))  showToast('Alertes effacées.', 'info');
     if (p.has('goals_updated'))   showToast('Objectifs mis à jour.', 'info');
+    if (p.has('debt_added'))      showToast('Dette ajoutée !');
+    if (p.has('debt_paid'))       showToast('Remboursement enregistré !');
+    if (p.has('debt_deleted'))    showToast('Dette supprimée.', 'warning');
 });
 </script>
 
-<!-- ════════════════════════════════════════════
-     HEADER
-     ════════════════════════════════════════════ -->
+<!-- HEADER -->
 <header class="border-bottom shadow-sm mb-4">
     <div class="container py-2">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -451,31 +469,26 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 </header>
 
-<!-- Bouton flottant -->
+<!-- BOUTON FLOTTANT -->
 <button class="btn btn-primary btn-floating" data-bs-toggle="modal" data-bs-target="#addExpenseModal">
     <i class="fas fa-plus me-2"></i>Nouvelle dépense
 </button>
 
-<!-- ════════════════════════════════════════════
-     NAVIGATION TABS
-     ════════════════════════════════════════════ -->
+<!-- NAVIGATION -->
 <div class="container">
 <ul class="nav nav-tabs" id="myTab" role="tablist">
-    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dashboard"  type="button">Tableau de bord</button></li>
-    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#budgets"    type="button">Budgets</button></li>
-    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#expenses"   type="button">Historique</button></li>
-    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#reports"    type="button">Rapports</button></li>
-    <li class="nav-item"><button class="nav-link"        data-bs-toggle="tab" data-bs-target="#savings"    type="button">Épargne</button></li>
-    <li class="nav-item">
-        <button class="nav-link position-relative" id="alerts-tab" data-bs-toggle="tab" data-bs-target="#alerts" type="button">Alertes</button>
-    </li>
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dashboard" type="button">Tableau de bord</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#budgets"   type="button">Budgets</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#expenses"  type="button">Historique</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#reports"   type="button">Rapports</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#savings"   type="button">Épargne</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#debts"     type="button">Dettes</button></li>
+    <li class="nav-item"><button class="nav-link position-relative" id="alerts-tab" data-bs-toggle="tab" data-bs-target="#alerts" type="button">Alertes</button></li>
 </ul>
 
 <div class="tab-content mt-3" id="myTabContent">
 
-<!-- ════════════════════════════════════════════
-     TAB : TABLEAU DE BORD
-     ════════════════════════════════════════════ -->
+<!-- ══════════════════ TAB : DASHBOARD ══════════════════ -->
 <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
 
     <?php if ($banner_type): ?>
@@ -565,9 +578,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <form method="POST" class="d-inline">
                                     <input type="hidden" name="delete_expense" value="<?php echo $exp['id']; ?>">
                                     <input type="hidden" name="current_tab" value="dashboard">
-                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Supprimer ?')">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Supprimer ?')"><i class="fas fa-trash"></i></button>
                                 </form>
                             </div>
                         </div>
@@ -580,15 +591,12 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
     </div>
 
-    <!-- Top 3 catégories -->
+    <!-- Top 3 -->
     <div class="card p-4">
-        <h6 class="fw-bold text-muted mb-3">
-            <i class="fas fa-fire me-2 text-danger"></i>Top dépenses du mois
-        </h6>
+        <h6 class="fw-bold text-muted mb-3"><i class="fas fa-fire me-2 text-danger"></i>Top dépenses du mois</h6>
         <?php if (!empty($top3) && $total_expenses > 0): ?>
             <?php foreach ($top3 as $cat => $d):
-                $bc = $d['percent'] < 60 ? 'bg-success' : ($d['percent'] < 85 ? 'bg-warning' : 'bg-danger');
-            ?>
+                $bc = $d['percent'] < 60 ? 'bg-success' : ($d['percent'] < 85 ? 'bg-warning' : 'bg-danger'); ?>
             <div class="mb-3">
                 <div class="d-flex justify-content-between mb-1">
                     <span class="fw-semibold"><?php echo htmlspecialchars($cat); ?></span>
@@ -604,7 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <?php endif; ?>
     </div>
 
-    <!-- Barre consommation budget + cycle (EN BAS) -->
+    <!-- Barre consommation + cycle (EN BAS) -->
     <div class="card px-4 py-3">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <span class="fw-semibold text-muted">Consommation du budget mensuel</span>
@@ -632,34 +640,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
 </div><!-- /#dashboard -->
 
-<!-- ════════════════════════════════════════════
-     TAB : BUDGETS
-     ════════════════════════════════════════════ -->
+<!-- ══════════════════ TAB : BUDGETS ══════════════════ -->
 <div class="tab-pane fade" id="budgets" role="tabpanel">
     <div class="row">
         <div class="col-md-8">
             <div class="card p-4">
-                <h5 class="fw-bold mb-1" style="color:#4B5563;">
-                    <i class="fas fa-chart-line me-2"></i>Progression Budget
-                </h5>
+                <h5 class="fw-bold mb-1" style="color:#4B5563;"><i class="fas fa-chart-line me-2"></i>Progression Budget</h5>
                 <p class="text-muted mb-4" style="font-size:.88rem;">Utilisation des budgets par catégorie</p>
                 <?php
-                $dot_colors = [
-                    'Alimentation'      => '#1E40AF',
-                    'Transport'         => '#3b82f6',
-                    'Loisirs/Sortie'    => '#8b5cf6',
-                    'Mode'              => '#ec4899',
-                    'Aide proche'       => '#10b981',
-                    'Abonnement mensuel'=> '#f59e0b',
-                    'Épargne'           => '#b91c1c',
-                ];
+                $dot_colors = ['Alimentation'=>'#1E40AF','Transport'=>'#3b82f6','Loisirs/Sortie'=>'#8b5cf6','Mode'=>'#ec4899','Aide proche'=>'#10b981','Abonnement mensuel'=>'#f59e0b','Épargne'=>'#b91c1c'];
                 $sorted_budgets = $budgets;
                 ksort($sorted_budgets, SORT_NATURAL | SORT_FLAG_CASE);
                 foreach ($sorted_budgets as $category => $budget):
                     if (floatval($budget) <= 0) continue;
-                    $spent       = calculateCategoryExpenses($category);
-                    $used_pct    = $budget > 0 ? round(($spent / $budget) * 100, 1) : 0;
-                    $dot_color   = $dot_colors[$category] ?? '#6b7280';
+                    $spent     = calculateCategoryExpenses($category);
+                    $used_pct  = $budget > 0 ? round(($spent / $budget) * 100, 1) : 0;
+                    $dot_color = $dot_colors[$category] ?? '#6b7280';
                 ?>
                 <div class="mb-4">
                     <div class="d-flex justify-content-between align-items-center mb-1">
@@ -667,12 +663,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="rounded-dot" style="background:<?php echo $dot_color; ?>;"></span>
                             <span class="fw-semibold" style="color:#374151;"><?php echo htmlspecialchars($category); ?></span>
                         </div>
-                        <span style="font-size:.85rem;color:#4b5563;">
-                            <?php echo number_format($spent, 0, ',', ' '); ?> / <?php echo number_format($budget, 0, ',', ' '); ?> FCFA
-                        </span>
+                        <span style="font-size:.85rem;color:#4b5563;"><?php echo number_format($spent,0,',',' '); ?> / <?php echo number_format($budget,0,',',' '); ?> FCFA</span>
                     </div>
                     <div class="d-flex justify-content-end mb-1">
-                        <small style="color:#6b7280;"><?php echo number_format($used_pct, 1); ?>% utilisé</small>
+                        <small style="color:#6b7280;"><?php echo number_format($used_pct,1); ?>% utilisé</small>
                     </div>
                     <div class="progress" style="height:8px;border-radius:4px;background:#e5e7eb;">
                         <div class="progress-bar" style="width:<?php echo min(100,$used_pct); ?>%;background:<?php echo $dot_color; ?>;"></div>
@@ -680,44 +674,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <?php endforeach; ?>
                 <div class="d-flex gap-2 mt-2">
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editBudgetsModal">
-                        <i class="fas fa-edit me-1"></i>Modifier
-                    </button>
-                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addBudgetCategoryModal">
-                        <i class="fas fa-plus me-1"></i>Ajouter
-                    </button>
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editBudgetsModal"><i class="fas fa-edit me-1"></i>Modifier</button>
+                    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addBudgetCategoryModal"><i class="fas fa-plus me-1"></i>Ajouter</button>
                 </div>
             </div>
         </div>
         <div class="col-md-4">
             <div class="card">
                 <div class="card-header fw-semibold">Budget vs Dépenses</div>
-                <div class="card-body">
-                    <div class="chart-container"><canvas id="budgetComparisonChart"></canvas></div>
-                </div>
+                <div class="card-body"><div class="chart-container"><canvas id="budgetComparisonChart"></canvas></div></div>
             </div>
         </div>
     </div>
 </div><!-- /#budgets -->
 
-<!-- ════════════════════════════════════════════
-     TAB : HISTORIQUE
-     ════════════════════════════════════════════ -->
+<!-- ══════════════════ TAB : HISTORIQUE ══════════════════ -->
 <div class="tab-pane fade" id="expenses" role="tabpanel">
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center">
             <span class="fw-semibold">Liste des Dépenses</span>
             <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#filtersCollapse">
-                    <i class="fas fa-filter me-1"></i>Filtres
-                </button>
-                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAllExpensesModal">
-                    <i class="fas fa-trash me-1"></i>Tout supprimer
-                </button>
+                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#filtersCollapse"><i class="fas fa-filter me-1"></i>Filtres</button>
+                <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAllExpensesModal"><i class="fas fa-trash me-1"></i>Tout supprimer</button>
             </div>
         </div>
         <div class="card-body">
-            <!-- Filtres -->
             <div class="collapse mb-3" id="filtersCollapse">
                 <div class="card card-body bg-light">
                     <div class="row g-2">
@@ -730,22 +711,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-3 col-6">
-                            <label class="form-label small">Date début</label>
-                            <input type="date" class="form-control form-control-sm" id="filterDateStart">
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <label class="form-label small">Date fin</label>
-                            <input type="date" class="form-control form-control-sm" id="filterDateEnd">
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <label class="form-label small">Montant min</label>
-                            <input type="number" class="form-control form-control-sm" id="filterAmountMin" placeholder="0">
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <label class="form-label small">Montant max</label>
-                            <input type="number" class="form-control form-control-sm" id="filterAmountMax" placeholder="Max">
-                        </div>
+                        <div class="col-md-3 col-6"><label class="form-label small">Date début</label><input type="date" class="form-control form-control-sm" id="filterDateStart"></div>
+                        <div class="col-md-3 col-6"><label class="form-label small">Date fin</label><input type="date" class="form-control form-control-sm" id="filterDateEnd"></div>
+                        <div class="col-md-3 col-6"><label class="form-label small">Montant min</label><input type="number" class="form-control form-control-sm" id="filterAmountMin" placeholder="0"></div>
+                        <div class="col-md-3 col-6"><label class="form-label small">Montant max</label><input type="number" class="form-control form-control-sm" id="filterAmountMax" placeholder="Max"></div>
                         <div class="col-12 mt-1">
                             <button class="btn btn-primary btn-sm me-2" id="applyFilters">Appliquer</button>
                             <button class="btn btn-outline-secondary btn-sm" id="resetFilters">Réinitialiser</button>
@@ -753,9 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </div>
             </div>
-
             <small class="text-muted d-block mb-2" id="expensesCount"><?php echo count($expenses); ?> dépense(s)</small>
-
             <div class="table-responsive">
                 <table class="table table-striped table-hover" id="expensesTable">
                     <thead class="table-light">
@@ -779,9 +746,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             </td>
                             <td><?php echo htmlspecialchars($exp['category']); ?></td>
                             <td><?php echo htmlspecialchars($exp['description']); ?></td>
-                            <td class="text-end text-danger fw-semibold" data-sort="<?php echo $exp['amount']; ?>">
-                                -<?php echo formatCurrency($exp['amount']); ?>
-                            </td>
+                            <td class="text-end text-danger fw-semibold" data-sort="<?php echo $exp['amount']; ?>">-<?php echo formatCurrency($exp['amount']); ?></td>
                             <td>
                                 <button class="btn btn-sm btn-outline-secondary me-1"
                                     data-bs-toggle="modal" data-bs-target="#editExpenseModal"
@@ -795,9 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <form method="POST" class="d-inline">
                                     <input type="hidden" name="delete_expense" value="<?php echo $exp['id']; ?>">
                                     <input type="hidden" name="current_tab" value="expenses">
-                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Supprimer ?')">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Supprimer ?')"><i class="fas fa-trash"></i></button>
                                 </form>
                             </td>
                         </tr>
@@ -812,9 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 </div><!-- /#expenses -->
 
-<!-- ════════════════════════════════════════════
-     TAB : RAPPORTS
-     ════════════════════════════════════════════ -->
+<!-- ══════════════════ TAB : RAPPORTS ══════════════════ -->
 <div class="tab-pane fade" id="reports" role="tabpanel">
     <div class="row">
         <div class="col-md-6 mb-3">
@@ -836,18 +797,14 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 </div><!-- /#reports -->
 
-<!-- ════════════════════════════════════════════
-     TAB : ÉPARGNE
-     ════════════════════════════════════════════ -->
+<!-- ══════════════════ TAB : ÉPARGNE ══════════════════ -->
 <div class="tab-pane fade" id="savings" role="tabpanel">
     <div class="row">
         <div class="col-md-6">
             <div class="card mt-3">
                 <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
                     Objectif d'Épargne Mensuel
-                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#savingGoalsModal">
-                        <i class="fas fa-bullseye me-1"></i>Gérer
-                    </button>
+                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#savingGoalsModal"><i class="fas fa-bullseye me-1"></i>Gérer</button>
                 </div>
                 <div class="card-body">
                     <p class="text-muted small mb-1">Épargne ce mois</p>
@@ -866,21 +823,19 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="card mt-3">
                 <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
                     🎯 Mes Objectifs d'Épargne
-                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#savingGoalsModal">
-                        <i class="fas fa-cog me-1"></i>Modifier
-                    </button>
+                    <button class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#savingGoalsModal"><i class="fas fa-cog me-1"></i>Modifier</button>
                 </div>
                 <div class="card-body">
                     <?php if (!empty($saving_goals)): foreach ($saving_goals as $key => $goal):
-                        $pct_goal   = $goal['target'] > 0 ? min(($goal['current'] / $goal['target']) * 100, 100) : 0;
-                        $rem_goal   = $goal['target'] - $goal['current'];
-                        $dl         = new DateTime($goal['deadline']);
-                        $iv         = (new DateTime())->diff($dl);
-                        $mo_rem     = max(($iv->y * 12) + $iv->m, 1);
-                        $wk_rem     = max(ceil($iv->days / 7), 1);
-                        $mo_save    = $rem_goal > 0 ? ceil($rem_goal / $mo_rem) : 0;
-                        $wk_save    = $rem_goal > 0 ? ceil($rem_goal / $wk_rem) : 0;
-                        $pc         = $pct_goal >= 100 ? 'bg-success' : ($pct_goal >= 75 ? 'bg-warning' : ($pct_goal >= 50 ? 'bg-info' : 'bg-primary'));
+                        $pct_goal = $goal['target'] > 0 ? min(($goal['current'] / $goal['target']) * 100, 100) : 0;
+                        $rem_goal = $goal['target'] - $goal['current'];
+                        $dl       = new DateTime($goal['deadline']);
+                        $iv       = (new DateTime())->diff($dl);
+                        $mo_rem   = max(($iv->y * 12) + $iv->m, 1);
+                        $wk_rem   = max(ceil($iv->days / 7), 1);
+                        $mo_save  = $rem_goal > 0 ? ceil($rem_goal / $mo_rem) : 0;
+                        $wk_save  = $rem_goal > 0 ? ceil($rem_goal / $wk_rem) : 0;
+                        $pc       = $pct_goal >= 100 ? 'bg-success' : ($pct_goal >= 75 ? 'bg-warning' : ($pct_goal >= 50 ? 'bg-info' : 'bg-primary'));
                     ?>
                     <div class="goal-card mb-3 p-3 border rounded">
                         <div class="d-flex justify-content-between mb-2">
@@ -902,18 +857,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             <div class="text-muted mt-1"><i class="fas fa-hourglass-end me-1"></i>Échéance : <?php echo date('d/m/Y', strtotime($goal['deadline'])); ?></div>
                         </div>
                         <?php else: ?>
-                        <div class="p-2 bg-success bg-opacity-10 rounded small text-success">
-                            <i class="fas fa-check-circle me-1"></i>Objectif atteint ! 🎉
-                        </div>
+                        <div class="p-2 bg-success bg-opacity-10 rounded small text-success"><i class="fas fa-check-circle me-1"></i>Objectif atteint ! 🎉</div>
                         <?php endif; ?>
                     </div>
                     <?php endforeach; else: ?>
                     <div class="text-center py-4 text-muted">
                         <i class="fas fa-bullseye fa-2x mb-2 opacity-50"></i>
                         <p>Aucun objectif défini</p>
-                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#savingGoalsModal">
-                            <i class="fas fa-plus me-1"></i>Créer un objectif
-                        </button>
+                        <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#savingGoalsModal"><i class="fas fa-plus me-1"></i>Créer un objectif</button>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -922,17 +873,126 @@ document.addEventListener('DOMContentLoaded', () => {
     </div>
 </div><!-- /#savings -->
 
-<!-- ════════════════════════════════════════════
-     TAB : ALERTES
-     ════════════════════════════════════════════ -->
+<!-- ══════════════════ TAB : DETTES ══════════════════ -->
+<div class="tab-pane fade" id="debts" role="tabpanel">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+                    Mes Dettes en cours
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addDebtModal">
+                        <i class="fas fa-plus me-1"></i>Nouvelle dette
+                    </button>
+                </div>
+                <div class="card-body">
+                    <?php
+                    $active_debts  = array_filter($debts, fn($d) => $d['status'] === 'active');
+                    $settled_debts = array_filter($debts, fn($d) => $d['status'] === 'settled');
+                    ?>
+                    <?php if (empty($active_debts)): ?>
+                        <div class="text-center py-5 text-muted">
+                            <i class="fas fa-handshake fa-3x mb-3 opacity-25"></i>
+                            <p class="fw-semibold mb-1">Aucune dette en cours</p>
+                            <small>Cliquez sur "Nouvelle dette" pour en ajouter une.</small>
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($active_debts as $debt):
+                            $remaining = $debt['total_amount'] - $debt['amount_paid'];
+                            $pct       = $debt['total_amount'] > 0 ? round(($debt['amount_paid'] / $debt['total_amount']) * 100, 1) : 0;
+                            $bar_col   = $pct < 40 ? 'bg-danger' : ($pct < 75 ? 'bg-warning' : 'bg-success');
+                        ?>
+                        <div class="mb-4 p-3 border rounded">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <span class="fw-bold fs-6"><?php echo htmlspecialchars($debt['label']); ?></span>
+                                    <?php if (!empty($debt['note'])): ?><small class="text-muted ms-2"><?php echo htmlspecialchars($debt['note']); ?></small><?php endif; ?>
+                                </div>
+                                <div class="d-flex gap-1">
+                                    <button class="btn btn-sm btn-success"
+                                        data-bs-toggle="modal" data-bs-target="#payDebtModal"
+                                        data-debt-id="<?php echo $debt['id']; ?>"
+                                        data-debt-label="<?php echo htmlspecialchars($debt['label']); ?>"
+                                        data-debt-remaining="<?php echo $remaining; ?>">
+                                        <i class="fas fa-money-bill-wave me-1"></i>Payer
+                                    </button>
+                                    <form method="POST" class="d-inline" onsubmit="return confirm('Supprimer cette dette ?')">
+                                        <input type="hidden" name="delete_debt" value="<?php echo $debt['id']; ?>">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                                    </form>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted">Remboursé : <?php echo formatCurrency($debt['amount_paid']); ?></small>
+                                <small class="text-muted">Reste : <strong class="text-danger"><?php echo formatCurrency($remaining); ?></strong></small>
+                            </div>
+                            <div class="progress" style="height:10px;">
+                                <div class="progress-bar <?php echo $bar_col; ?>" style="width:<?php echo $pct; ?>%;"></div>
+                            </div>
+                            <div class="d-flex justify-content-between mt-1">
+                                <small class="text-muted">0</small>
+                                <small class="text-muted"><?php echo formatCurrency($debt['total_amount']); ?> — <?php echo $pct; ?>% remboursé</small>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header fw-semibold">Résumé</div>
+                <div class="card-body">
+                    <?php
+                    $total_owed     = array_sum(array_column(array_values($active_debts), 'total_amount'));
+                    $total_paid_all = array_sum(array_column(array_values($active_debts), 'amount_paid'));
+                    $total_rem      = $total_owed - $total_paid_all;
+                    ?>
+                    <div class="d-flex justify-content-between mb-2"><span class="text-muted">Dettes actives</span><strong><?php echo count($active_debts); ?></strong></div>
+                    <div class="d-flex justify-content-between mb-2"><span class="text-muted">Total dû</span><strong class="text-danger"><?php echo formatCurrency($total_rem); ?></strong></div>
+                    <div class="d-flex justify-content-between mb-3"><span class="text-muted">Déjà remboursé</span><strong class="text-success"><?php echo formatCurrency($total_paid_all); ?></strong></div>
+                    <?php if ($total_owed > 0): ?>
+                    <div class="progress" style="height:8px;">
+                        <div class="progress-bar bg-success" style="width:<?php echo round(($total_paid_all / $total_owed) * 100); ?>%;"></div>
+                    </div>
+                    <small class="text-muted"><?php echo round(($total_paid_all / max($total_owed,1)) * 100); ?>% remboursé au total</small>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php if (!empty($settled_debts)): ?>
+            <div class="card mt-3">
+                <div class="card-header fw-semibold text-success"><i class="fas fa-check-circle me-2"></i>Dettes soldées</div>
+                <div class="card-body p-2">
+                    <?php foreach ($settled_debts as $debt): ?>
+                    <div class="d-flex justify-content-between align-items-center py-2 px-1 border-bottom">
+                        <div>
+                            <span class="fw-semibold"><?php echo htmlspecialchars($debt['label']); ?></span>
+                            <small class="text-muted ms-2"><?php echo formatCurrency($debt['total_amount']); ?></small>
+                        </div>
+                        <div class="d-flex gap-1 align-items-center">
+                            <span class="badge bg-success">Soldée ✅</span>
+                            <form method="POST" class="d-inline">
+                                <input type="hidden" name="delete_debt" value="<?php echo $debt['id']; ?>">
+                                <button class="btn btn-sm btn-outline-secondary border-0"><i class="fas fa-times"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div><!-- /#debts -->
+
+<!-- ══════════════════ TAB : ALERTES ══════════════════ -->
 <div class="tab-pane fade" id="alerts" role="tabpanel">
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
             Alertes
             <form method="POST" onsubmit="return confirm('Tout effacer ?')">
-                <button name="clear_all_alerts" class="btn btn-sm btn-outline-danger">
-                    <i class="fas fa-bell-slash me-1"></i>Tout effacer
-                </button>
+                <button name="clear_all_alerts" class="btn btn-sm btn-outline-danger"><i class="fas fa-bell-slash me-1"></i>Tout effacer</button>
             </form>
         </div>
         <div class="card-body">
@@ -963,19 +1023,16 @@ document.addEventListener('DOMContentLoaded', () => {
 </div><!-- /tab-content -->
 </div><!-- /container -->
 
-<!-- ════════════════════════════════════════════
+<!-- ══════════════════════════════════════════
      MODALS
-     ════════════════════════════════════════════ -->
+     ══════════════════════════════════════════ -->
 
 <!-- Ajouter une dépense -->
 <div class="modal fade" id="addExpenseModal" tabindex="-1">
   <div class="modal-dialog"><form method="POST" class="modal-content">
     <div class="modal-header"><h5 class="modal-title">Nouvelle dépense</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-        <div class="mb-3">
-            <label class="form-label">Date</label>
-            <input type="date" class="form-control" name="date" value="<?php echo date('Y-m-d'); ?>">
-        </div>
+        <div class="mb-3"><label class="form-label">Date</label><input type="date" class="form-control" name="date" value="<?php echo date('Y-m-d'); ?>"></div>
         <div class="mb-3">
             <label class="form-label">Catégorie</label>
             <select class="form-select" name="category" required>
@@ -994,14 +1051,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="mb-3">
-            <label class="form-label">Montant (FCFA)</label>
-            <input type="number" class="form-control" name="amount" min="0" step="100" required>
-        </div>
-        <div class="mb-3">
-            <label class="form-label">Description</label>
-            <input type="text" class="form-control" name="description" placeholder="Description de la dépense">
-        </div>
+        <div class="mb-3"><label class="form-label">Montant (FCFA)</label><input type="number" class="form-control" name="amount" min="0" step="100" required></div>
+        <div class="mb-3"><label class="form-label">Description</label><input type="text" class="form-control" name="description" placeholder="Description de la dépense"></div>
     </div>
     <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -1040,10 +1091,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="modal-dialog modal-lg"><form method="POST" class="modal-content">
     <div class="modal-header"><h5 class="modal-title">Modifier les budgets</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-        <div class="mb-3">
-            <label class="form-label">Budget Mensuel Global (FCFA)</label>
-            <input type="number" class="form-control" name="monthly_budget" value="<?php echo getMeta('monthly_budget'); ?>" required>
-        </div>
+        <div class="mb-3"><label class="form-label">Budget Mensuel Global (FCFA)</label><input type="number" class="form-control" name="monthly_budget" value="<?php echo getMeta('monthly_budget'); ?>" required></div>
         <h6 class="mt-3">Budgets par Catégorie</h6>
         <?php foreach ($budgets as $category => $budget): ?>
         <div class="row mb-2">
@@ -1080,9 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="modal-header"><h5 class="modal-title">🎯 Objectifs d'épargne</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <form method="POST">
     <div class="modal-body">
-        <button type="button" class="btn btn-success btn-sm mb-3" onclick="addNewGoal()">
-            <i class="fas fa-plus me-1"></i>Nouvel objectif
-        </button>
+        <button type="button" class="btn btn-success btn-sm mb-3" onclick="addNewGoal()"><i class="fas fa-plus me-1"></i>Nouvel objectif</button>
         <div id="goals-container">
             <?php foreach ($saving_goals as $key => $goal):
                 $pct_g = $goal['target'] > 0 ? min(($goal['current'] / $goal['target']) * 100, 100) : 0;
@@ -1136,13 +1182,48 @@ document.addEventListener('DOMContentLoaded', () => {
   </div></div>
 </div>
 
-<!-- ════════════════════════════════════════════
+<!-- Ajouter une dette -->
+<div class="modal fade" id="addDebtModal" tabindex="-1">
+  <div class="modal-dialog"><form method="POST" class="modal-content">
+    <div class="modal-header"><h5 class="modal-title"><i class="fas fa-handshake me-2"></i>Nouvelle dette</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <div class="mb-3"><label class="form-label">Créancier <small class="text-muted">(qui tu rembourses)</small></label><input type="text" class="form-control" name="debt_label" placeholder="Ex: Maman, Ami Kofi..." required></div>
+        <div class="mb-3"><label class="form-label">Montant total à rembourser (FCFA)</label><input type="number" class="form-control" name="debt_total_amount" min="0" step="100" required></div>
+        <div class="mb-3"><label class="form-label">Note <small class="text-muted">(optionnel)</small></label><input type="text" class="form-control" name="debt_note" placeholder="Ex: Prêt pour téléphone..."></div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="submit" name="add_debt" class="btn btn-primary">Ajouter</button>
+    </div>
+  </form></div>
+</div>
+
+<!-- Payer une dette -->
+<div class="modal fade" id="payDebtModal" tabindex="-1">
+  <div class="modal-dialog"><form method="POST" class="modal-content">
+    <div class="modal-header"><h5 class="modal-title"><i class="fas fa-money-bill-wave me-2"></i>Enregistrer un remboursement</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+        <input type="hidden" name="debt_id" id="payDebtId">
+        <div class="mb-3"><label class="form-label">Créancier</label><input type="text" class="form-control" id="payDebtLabel" readonly></div>
+        <div class="mb-3"><label class="form-label">Montant restant</label><input type="text" class="form-control" id="payDebtRemaining" readonly></div>
+        <div class="mb-3"><label class="form-label">Montant à rembourser (FCFA)</label><input type="number" class="form-control" name="payment_amount" min="1" step="100" required></div>
+        <div class="mb-3"><label class="form-label">Date</label><input type="date" class="form-control" name="payment_date" value="<?php echo date('Y-m-d'); ?>"></div>
+    </div>
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="submit" name="pay_debt" class="btn btn-success">Enregistrer</button>
+    </div>
+  </form></div>
+</div>
+
+<!-- ══════════════════════════════════════════
      JAVASCRIPT
-     ════════════════════════════════════════════ -->
+     ══════════════════════════════════════════ -->
 <script>
-// Badge alertes non lues
 document.addEventListener('DOMContentLoaded', function () {
-    const alertsTab  = document.getElementById('alerts-tab');
+
+    // Badge alertes non lues
+    const alertsTab = document.getElementById('alerts-tab');
     const unseenCount = <?php
         $unseen = 0;
         foreach ($alerts as $a) { if (isset($a['seen']) && $a['seen'] == 0) $unseen++; }
@@ -1155,7 +1236,7 @@ document.addEventListener('DOMContentLoaded', function () {
         badge.textContent = unseenCount;
         alertsTab.appendChild(badge);
         alertsTab.addEventListener('click', () => {
-            fetch(location.pathname, { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: 'mark_alerts_seen=1' })
+            fetch(location.pathname, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'mark_alerts_seen=1' })
                 .then(() => badge.remove());
         }, { once: true });
     }
@@ -1172,30 +1253,20 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('edit_date').value        = b.dataset.date;
         });
     }
-});
 
-// Objectifs d'épargne — ajouter/supprimer
-function addNewGoal() {
-    const id  = 'goal_' + Date.now();
-    const tpl = `
-    <div class="goal-item card mb-3"><div class="card-body">
-        <div class="row g-2">
-            <div class="col-md-5"><label class="form-label small">Nom</label><input type="text" class="form-control form-control-sm" name="goals[${id}][name]" value="Nouvel objectif" required></div>
-            <div class="col-md-3"><label class="form-label small">Cible (FCFA)</label><input type="number" class="form-control form-control-sm" name="goals[${id}][target]" value="100000" min="0" required></div>
-            <div class="col-md-3"><label class="form-label small">Épargné (FCFA)</label><input type="number" class="form-control form-control-sm" name="goals[${id}][current]" value="0" min="0"></div>
-            <div class="col-md-3"><label class="form-label small">Échéance</label><input type="date" class="form-control form-control-sm" name="goals[${id}][deadline]" value="<?php echo date('Y-m-d', strtotime('+1 year')); ?>"></div>
-            <div class="col-md-1 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100" onclick="removeGoal(this)"><i class="fas fa-trash"></i></button></div>
-        </div>
-        <div class="progress mt-2" style="height:16px;"><div class="progress-bar bg-info" style="width:0%;">0%</div></div>
-    </div></div>`;
-    document.getElementById('goals-container').insertAdjacentHTML('beforeend', tpl);
-}
-function removeGoal(btn) { btn.closest('.goal-item').remove(); }
+    // Pré-remplir modal paiement dette
+    const payDebtModal = document.getElementById('payDebtModal');
+    if (payDebtModal) {
+        payDebtModal.addEventListener('show.bs.modal', e => {
+            const b = e.relatedTarget;
+            document.getElementById('payDebtId').value        = b.dataset.debtId;
+            document.getElementById('payDebtLabel').value     = b.dataset.debtLabel;
+            document.getElementById('payDebtRemaining').value = parseFloat(b.dataset.debtRemaining).toLocaleString('fr-FR') + ' FCFA';
+        });
+    }
 
-// ── Graphiques ─────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function () {
-    const opts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } };
-    const colors = ['#FF6384','#36A2EB','#FFCE56','#4BC0C0','#9966FF','#FF9F40','#8AC926','#1982C4','#F472B6','#60A5FA','#34D399','#FBBF24'];
+    // ── Graphiques ────────────────────────────────────────
+    const opts = { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'bottom' } } };
 
     // Pie — répartition dépenses
     const expCtx = document.getElementById('expensesChart');
@@ -1216,16 +1287,13 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(budCtx, {
             type: 'bar',
             data: {
-                labels: [<?php
-                    $bl = []; foreach ($budgets as $c => $b) { if (floatval($b) > 0) $bl[] = $c; }
-                    echo implode(',', array_map(fn($c) => "'" . addslashes($c) . "'", $bl));
-                ?>],
+                labels: [<?php $bl=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bl[]=$c;} echo implode(',', array_map(fn($c)=>"'".addslashes($c)."'", $bl)); ?>],
                 datasets: [
-                    { label: 'Budget',   data: [<?php $bd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bd[]=floatval($b);} echo implode(',',$bd); ?>], backgroundColor: '#60A5FA' },
-                    { label: 'Dépensé',  data: [<?php $sd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$sd[]=calculateCategoryExpenses($c);} echo implode(',',$sd); ?>], backgroundColor: '#e74c3c' }
+                    { label:'Budget',  data:[<?php $bd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bd[]=floatval($b);} echo implode(',',$bd); ?>], backgroundColor:'#60A5FA' },
+                    { label:'Dépensé', data:[<?php $sd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$sd[]=calculateCategoryExpenses($c);} echo implode(',',$sd); ?>], backgroundColor:'#e74c3c' }
                 ]
             },
-            options: { ...opts, scales: { y: { beginAtZero: true } } }
+            options: { ...opts, scales:{ y:{ beginAtZero:true } } }
         });
     }
 
@@ -1249,9 +1317,9 @@ document.addEventListener('DOMContentLoaded', function () {
             type: 'bar',
             data: {
                 labels: [<?php echo '"' . implode('","', $weekDays) . '"'; ?>],
-                datasets: [{ label: 'FCFA', data: [<?php echo implode(',', $weekExpenses); ?>], backgroundColor: '#36A2EB' }]
+                datasets: [{ label:'FCFA', data:[<?php echo implode(',', $weekExpenses); ?>], backgroundColor:'#36A2EB' }]
             },
-            options: { ...opts, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            options: { ...opts, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }
         });
     }
 
@@ -1269,12 +1337,30 @@ document.addEventListener('DOMContentLoaded', function () {
             type: 'line',
             data: {
                 labels: <?php echo json_encode($jl); ?>,
-                datasets: [{ label: 'Dépenses', data: <?php echo json_encode($jd); ?>, borderColor: '#FF6384', backgroundColor: 'rgba(255,99,132,.1)', fill: true, tension: .4 }]
+                datasets: [{ label:'Dépenses', data:<?php echo json_encode($jd); ?>, borderColor:'#FF6384', backgroundColor:'rgba(255,99,132,.1)', fill:true, tension:.4 }]
             },
-            options: { ...opts, scales: { y: { beginAtZero: true } } }
+            options: { ...opts, scales:{ y:{ beginAtZero:true } } }
         });
     }
 });
+
+// Objectifs d'épargne
+function addNewGoal() {
+    const id = 'goal_' + Date.now();
+    const tpl = `
+    <div class="goal-item card mb-3"><div class="card-body">
+        <div class="row g-2">
+            <div class="col-md-5"><label class="form-label small">Nom</label><input type="text" class="form-control form-control-sm" name="goals[${id}][name]" value="Nouvel objectif" required></div>
+            <div class="col-md-3"><label class="form-label small">Cible (FCFA)</label><input type="number" class="form-control form-control-sm" name="goals[${id}][target]" value="100000" min="0" required></div>
+            <div class="col-md-3"><label class="form-label small">Épargné (FCFA)</label><input type="number" class="form-control form-control-sm" name="goals[${id}][current]" value="0" min="0"></div>
+            <div class="col-md-3"><label class="form-label small">Échéance</label><input type="date" class="form-control form-control-sm" name="goals[${id}][deadline]" value="<?php echo date('Y-m-d', strtotime('+1 year')); ?>"></div>
+            <div class="col-md-1 d-flex align-items-end"><button type="button" class="btn btn-danger btn-sm w-100" onclick="removeGoal(this)"><i class="fas fa-trash"></i></button></div>
+        </div>
+        <div class="progress mt-2" style="height:16px;"><div class="progress-bar bg-info" style="width:0%;">0%</div></div>
+    </div></div>`;
+    document.getElementById('goals-container').insertAdjacentHTML('beforeend', tpl);
+}
+function removeGoal(btn) { btn.closest('.goal-item').remove(); }
 </script>
 
 </body>
