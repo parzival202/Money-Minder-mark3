@@ -1,4 +1,6 @@
 <?php
+require_once '../auth.php';
+requireAuth();
 require_once '../db.php';
 
 header('Content-Type: application/json');
@@ -7,7 +9,7 @@ header('Content-Type: application/json');
 init_db();
 
 // Get default user
-$user_id = ensure_default_user();
+$user_id = getCurrentUserId();
 
 // Insert a test alert
 $alert_id = insertAlert($user_id, 'test', 'This is a test alert to verify the red dot badge functionality.');

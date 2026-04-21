@@ -4,13 +4,20 @@
 // ============================================================
 date_default_timezone_set('Africa/Abidjan');
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/auth.php'; // démarre la session + fournit requireAuth()
+requireAuth();                       // redirige vers login.php si non connecté
 
 require_once __DIR__ . '/db.php';
 init_db();
-$user_id = ensure_default_user();
+$user_id = getCurrentUserId();       // respecte l'impersonation admin
+$current_user = fetchUserById($user_id);
+$current_user_display_name = getUserDisplayName($current_user);
+ensureUserBudgetMetaConsistency($user_id);
+if (userNeedsBudgetSetup($user_id)) {
+    header('Location: setup.php');
+    exit;
+}
+
 
 require_once __DIR__ . '/telegram_bot.php';
 global $__nikolaii;
@@ -27,6 +34,11 @@ $hour   = (int)$now->format('H');
 $minute = (int)$now->format('i');
 
 if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
+    $archiveResult = archiveCurrentCycle($user_id, $now);
+    if ($archiveResult['success']) {
+        $__nikolaii->sendMessage(buildArchiveSummaryMessage($archiveResult));
+    }
+    if (false) {
     $start       = (clone $now)->modify('first day of this month')->modify('-1 month')
                     ->setDate($now->format('Y'), $now->format('m') - 1 <= 0 ? 12 : $now->format('m') - 1, 27);
     $end         = (clone $now)->setDate($now->format('Y'), $now->format('m'), 26);
@@ -64,13 +76,24 @@ if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
         ];
         $__nikolaii->sendMessage($msgs[array_rand($msgs)]);
     }
+    }
 }
 
 // ============================================================
 // GESTION DES REQUÊTES POST
 // ============================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ // Déconnexion
+    if (isset($_POST['logout_action'])) {
+        logout();
+        header('Location: login.php'); exit;
+    }
 
+    // Arrêter l'impersonation (bouton dans la bannière)
+    if (isset($_POST['stop_impersonate'])) {
+        unset($_SESSION['impersonate_user_id']);
+        header('Location: index.php'); exit;
+    }
     if (isset($_POST['delete_budget_category'])) {
         $cat = $_POST['delete_budget_category'];
         $budgets = getBudgets($user_id);
@@ -123,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if (!$isDuplicate) {
             insertExpense($user_id, ['date' => $date, 'category' => $category, 'description' => $description, 'amount' => $amount]);
-            checkAndSendAlerts();
+            checkAndSendAlerts($user_id);
         }
         header('Location: ' . $_SERVER['PHP_SELF'] . '?added=1'); exit;
     }
@@ -132,29 +155,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $budgets = [];
         foreach ($_POST['budgets'] as $category => $amount) $budgets[$category] = floatval($amount);
         setBudgets($user_id, $budgets);
-        if (isset($_POST['monthly_budget'])) setMeta('monthly_budget', floatval($_POST['monthly_budget']));
+        if (isset($_POST['monthly_budget'])) setMeta('monthly_budget', floatval($_POST['monthly_budget']), $user_id);
         header('Location: ' . $_SERVER['PHP_SELF'] . '?budgets_updated=1&tab=budgets'); exit;
     }
 
     if (isset($_POST['delete_expense'])) {
-        deleteExpense($_POST['delete_expense']);
-        checkAndSendAlerts();
+        deleteExpense($user_id, $_POST['delete_expense']);
+        checkAndSendAlerts($user_id);
         header('Location: ' . $_SERVER['PHP_SELF'] . '?deleted=1&tab=' . urlencode($_POST['current_tab'] ?? 'dashboard')); exit;
     }
 
     if (isset($_POST['edit_expense'])) {
-        updateExpense($_POST['edit_expense_id'], [
+        updateExpense($user_id, $_POST['edit_expense_id'], [
             'amount'      => floatval($_POST['edit_amount']),
             'category'    => $_POST['edit_category'],
             'description' => trim($_POST['edit_description']),
             'date'        => $_POST['edit_date'],
         ]);
-        checkAndSendAlerts();
+        checkAndSendAlerts($user_id);
         header('Location: ' . $_SERVER['PHP_SELF'] . '?updated=1&tab=' . urlencode($_POST['current_tab'] ?? 'dashboard')); exit;
     }
 
     if (isset($_POST['delete_alert'])) {
-        markAlertSeen(intval($_POST['delete_alert']));
+        markAlertSeen($user_id, intval($_POST['delete_alert']));
         header('Location: ' . $_SERVER['PHP_SELF'] . '?tab=alerts'); exit;
     }
 
@@ -174,6 +197,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['archive_current_month'])) {
+        $archiveResult = archiveCurrentCycle($user_id);
+        if ($archiveResult['success']) {
+            $__nikolaii->sendMessage(buildArchiveSummaryMessage($archiveResult));
+            header('Location: ' . $_SERVER['PHP_SELF'] . '?archived=1'); exit;
+        }
+        if (($archiveResult['status'] ?? '') === 'already_archived') {
+            header('Location: ' . $_SERVER['PHP_SELF'] . '?already_archived=1'); exit;
+        }
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?tab=dashboard'); exit;
+        if (false) {
         $start = (new DateTime())->modify('first day of this month')->modify('-1 month')
                     ->setDate((new DateTime())->format('Y'), (new DateTime())->format('m') - 1 <= 0 ? 12 : (new DateTime())->format('m') - 1, 27);
         $end   = (new DateTime())->setDate((new DateTime())->format('Y'), (new DateTime())->format('m'), 26);
@@ -209,6 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . $_SERVER['PHP_SELF'] . '?archived=1'); exit;
         } else {
             header('Location: ' . $_SERVER['PHP_SELF'] . '?already_archived=1'); exit;
+        }
         }
     }
 
@@ -247,13 +281,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'description' => 'Remboursement — ' . $label,
                 'amount'      => $payment_amount,
             ]);
-            addDebtPayment($debt_id, $payment_amount);
+            addDebtPayment($user_id, $debt_id, $payment_amount);
         }
         header('Location: ' . $_SERVER['PHP_SELF'] . '?debt_paid=1&tab=debts'); exit;
     }
 
     if (isset($_POST['delete_debt'])) {
-        deleteDebt(intval($_POST['delete_debt']));
+        deleteDebt($user_id, intval($_POST['delete_debt']));
         header('Location: ' . $_SERVER['PHP_SELF'] . '?debt_deleted=1&tab=debts'); exit;
     }
 
@@ -294,7 +328,7 @@ $savings_percentage = ($remaining_budget > 0 && defined('MONTHLY_SAVING_GOAL') &
     ? ($remaining_budget / MONTHLY_SAVING_GOAL) * 100 : 0;
 
 // ── Variables dashboard ───────────────────────────────────────
-$monthly_budget      = floatval(getMeta('monthly_budget'));
+$monthly_budget      = floatval(getMeta('monthly_budget', '', $user_id));
 $budget_used_percent = $monthly_budget > 0 ? min(($total_expenses / $monthly_budget) * 100, 100) : 0;
 $bar_color           = $budget_used_percent < 60 ? 'bg-success' : ($budget_used_percent < 85 ? 'bg-warning' : 'bg-danger');
 
@@ -331,7 +365,7 @@ $days_remaining = max($days_total - $days_elapsed, 0);
 $cat_spending = [];
 foreach ($budgets as $cat => $budget) {
     if (floatval($budget) > 0) {
-        $s = calculateCategoryExpenses($cat);
+        $s = calculateCategoryExpenses($cat, $user_id);
         $cat_spending[$cat] = ['spent' => $s, 'budget' => floatval($budget), 'percent' => round(($s / floatval($budget)) * 100, 1)];
     }
 }
@@ -444,6 +478,19 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<?php if (isImpersonating()): ?>
+<div class="bg-warning text-dark text-center py-2" style="font-size:.85rem;font-weight:500;">
+    <i class="fas fa-eye me-2"></i>
+    Vous consultez le compte de <strong><?php echo htmlspecialchars(getImpersonatedUsername()); ?></strong>
+    <form method="POST" class="d-inline ms-3">
+        <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+        <button name="stop_impersonate" class="btn btn-sm btn-dark py-0 px-2" style="font-size:.8rem;">
+            <i class="fas fa-times me-1"></i>Revenir à mon compte
+        </button>
+    </form>
+</div>
+<?php endif; ?>
+
 <!-- HEADER -->
 <header class="border-bottom shadow-sm mb-4">
     <div class="container py-2">
@@ -455,12 +502,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     <small class="text-muted" style="font-size:.75rem;">
                         <?php echo date('F Y'); ?> &bull; Budget : <?php echo formatCurrency($monthly_budget); ?>
                     </small>
+                    <div><small class="text-muted" style="font-size:.75rem;">Compte : <?php echo htmlspecialchars($current_user_display_name); ?></small></div>
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 <a href="archives.php" class="btn btn-outline-secondary btn-sm">
                     Archives <i class="fas fa-archive ms-1"></i>
                 </a>
+                <?php if ($_SESSION['is_admin']): ?>
+<a href="admin.php" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-shield-alt me-1"></i>Admin
+</a>
+<?php endif; ?>
+
+<form method="POST" class="d-inline">
+    <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
+    <button name="logout_action" class="btn btn-outline-danger btn-sm">
+        <i class="fas fa-sign-out-alt me-1"></i>Déco
+    </button>
+</form>
                 <span class="badge <?php echo $savings_badge_class; ?> fs-6 py-2 px-3">
                     Épargne : <?php echo formatCurrency($current_savings); ?>
                 </span>
@@ -653,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ksort($sorted_budgets, SORT_NATURAL | SORT_FLAG_CASE);
                 foreach ($sorted_budgets as $category => $budget):
                     if (floatval($budget) <= 0) continue;
-                    $spent     = calculateCategoryExpenses($category);
+                    $spent     = calculateCategoryExpenses($category, $user_id);
                     $used_pct  = $budget > 0 ? round(($spent / $budget) * 100, 1) : 0;
                     $dot_color = $dot_colors[$category] ?? '#6b7280';
                 ?>
@@ -1040,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 $all_others_spent = true; $total_spent = 0;
                 foreach ($budgets as $cat => $budget) {
                     if ($cat === 'Épargne') continue;
-                    $s = calculateCategoryExpenses($cat); $total_spent += $s;
+                    $s = calculateCategoryExpenses($cat, $user_id); $total_spent += $s;
                     if ($s < floatval($budget)) $all_others_spent = false;
                 }
                 $show_savings = $all_others_spent || ($total_spent >= 140000);
@@ -1091,7 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <div class="modal-dialog modal-lg"><form method="POST" class="modal-content">
     <div class="modal-header"><h5 class="modal-title">Modifier les budgets</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body">
-        <div class="mb-3"><label class="form-label">Budget Mensuel Global (FCFA)</label><input type="number" class="form-control" name="monthly_budget" value="<?php echo getMeta('monthly_budget'); ?>" required></div>
+        <div class="mb-3"><label class="form-label">Budget Mensuel Global (FCFA)</label><input type="number" class="form-control" name="monthly_budget" value="<?php echo getMeta('monthly_budget', '', $user_id); ?>" required></div>
         <h6 class="mt-3">Budgets par Catégorie</h6>
         <?php foreach ($budgets as $category => $budget): ?>
         <div class="row mb-2">
@@ -1275,7 +1335,7 @@ document.addEventListener('DOMContentLoaded', function () {
             type: 'pie',
             data: {
                 labels: [<?php echo implode(',', array_map(fn($c) => "'" . addslashes($c) . "'", array_keys($budgets))); ?>],
-                datasets: [{ data: [<?php echo implode(',', array_map(fn($c) => calculateCategoryExpenses($c), array_keys($budgets))); ?>], backgroundColor: [<?php echo "'" . implode("','", $chartColors) . "'"; ?>] }]
+                datasets: [{ data: [<?php echo implode(',', array_map(fn($c) => calculateCategoryExpenses($c, $user_id), array_keys($budgets))); ?>], backgroundColor: [<?php echo "'" . implode("','", $chartColors) . "'"; ?>] }]
             },
             options: opts
         });
@@ -1290,7 +1350,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 labels: [<?php $bl=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bl[]=$c;} echo implode(',', array_map(fn($c)=>"'".addslashes($c)."'", $bl)); ?>],
                 datasets: [
                     { label:'Budget',  data:[<?php $bd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bd[]=floatval($b);} echo implode(',',$bd); ?>], backgroundColor:'#60A5FA' },
-                    { label:'Dépensé', data:[<?php $sd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$sd[]=calculateCategoryExpenses($c);} echo implode(',',$sd); ?>], backgroundColor:'#e74c3c' }
+                    { label:'Dépensé', data:[<?php $sd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$sd[]=calculateCategoryExpenses($c, $user_id);} echo implode(',',$sd); ?>], backgroundColor:'#e74c3c' }
                 ]
             },
             options: { ...opts, scales:{ y:{ beginAtZero:true } } }
@@ -1304,7 +1364,7 @@ document.addEventListener('DOMContentLoaded', function () {
             type: 'doughnut',
             data: {
                 labels: [<?php echo implode(',', array_map(fn($c) => "'" . addslashes($c) . "'", array_keys($budgets))); ?>],
-                datasets: [{ data: [<?php echo implode(',', array_map(fn($c) => calculateCategoryExpenses($c), array_keys($budgets))); ?>], backgroundColor: [<?php echo "'" . implode("','", $chartColors) . "'"; ?>] }]
+                datasets: [{ data: [<?php echo implode(',', array_map(fn($c) => calculateCategoryExpenses($c, $user_id), array_keys($budgets))); ?>], backgroundColor: [<?php echo "'" . implode("','", $chartColors) . "'"; ?>] }]
             },
             options: opts
         });

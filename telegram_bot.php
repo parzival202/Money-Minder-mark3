@@ -114,20 +114,20 @@ class Nikolaii {
         return implode('|', $parts);
     }
 
-    private function isAlertAlreadySent(string $signature): bool {
-    $sent = getMeta('telegram_sent_alerts');
+    private function isAlertAlreadySent(int $userId, string $signature): bool {
+    $sent = getMeta('telegram_sent_alerts', '', $userId);
     $sentArr = $sent ? json_decode($sent, true) : [];
     return in_array($signature, $sentArr, true);
     }
 
-    private function markAlertAsSent(string $signature): void {
-        $sent = getMeta('telegram_sent_alerts');
+    private function markAlertAsSent(int $userId, string $signature): void {
+        $sent = getMeta('telegram_sent_alerts', '', $userId);
         $sentArr = $sent ? json_decode($sent, true) : [];
         $sentArr[] = $signature;
         if (count($sentArr) > 500) {
             $sentArr = array_slice($sentArr, -300);
         }
-        setMeta('telegram_sent_alerts', json_encode($sentArr));
+        setMeta('telegram_sent_alerts', json_encode($sentArr), $userId);
     }
 
     private function sanitizeMessage(string $text): string {
@@ -167,63 +167,63 @@ class Nikolaii {
     }
 
     // ====== Messages concrets ======
-    public function largeExpense(array $expense): void {
+    public function largeExpense(int $userId, array $expense): void {
         $signature = $this->createAlertSignature('large_expense', $expense['category'], floatval($expense['amount']), (string)$expense['id']);
-        if ($this->isAlertAlreadySent($signature)) return;
+        if ($this->isAlertAlreadySent($userId, $signature)) return;
 
         $text = $this->renderTemplate('large_expense', [
             'amount'   => number_format($expense['amount'], 0, ',', ' ') . ' ' . CURRENCY,
             'category' => $expense['category']
         ]);
-        if ($this->sendMessage($text)) $this->markAlertAsSent($signature);
+        if ($this->sendMessage($text)) $this->markAlertAsSent($userId, $signature);
     }
 
-    public function budgetWarning(string $category, float $percentage): void {
+    public function budgetWarning(int $userId, string $category, float $percentage): void {
         $signature = $this->createAlertSignature('budget_warning', $category, null, date('Y-m-d-H'));
-        if ($this->isAlertAlreadySent($signature)) return;
+        if ($this->isAlertAlreadySent($userId, $signature)) return;
 
         $text = $this->renderTemplate('budget_warning', [
             'category'   => $category,
             'percentage' => number_format($percentage, 1)
         ]);
-        if ($this->sendMessage($text)) $this->markAlertAsSent($signature);
+        if ($this->sendMessage($text)) $this->markAlertAsSent($userId, $signature);
     }
 
-    public function budgetExceeded(string $category, float $percentage): void {
+    public function budgetExceeded(int $userId, string $category, float $percentage): void {
         $signature = $this->createAlertSignature('budget_exceeded', $category, null, date('Y-m-d-H'));
-        if ($this->isAlertAlreadySent($signature)) return;
+        if ($this->isAlertAlreadySent($userId, $signature)) return;
 
         $text = $this->renderTemplate('budget_exceeded', [
             'category'   => $category,
             'percentage' => number_format($percentage, 1)
         ]);
-        if ($this->sendMessage($text)) $this->markAlertAsSent($signature);
+        if ($this->sendMessage($text)) $this->markAlertAsSent($userId, $signature);
     }
 
-    public function globalBudget(float $total, float $budget): void {
+    public function globalBudget(int $userId, float $total, float $budget): void {
         $signature = $this->createAlertSignature('global_budget', null, null, date('Y-m-d-H'));
-        if ($this->isAlertAlreadySent($signature)) return;
+        if ($this->isAlertAlreadySent($userId, $signature)) return;
 
         $text = $this->renderTemplate('global_budget', []);
         $text .= "\nTotal: " . number_format($total, 0, ',', ' ') . ' ' . CURRENCY . " / Budget: " . number_format($budget, 0, ',', ' ') . ' ' . CURRENCY;
-        if ($this->sendMessage($text)) $this->markAlertAsSent($signature);
+        if ($this->sendMessage($text)) $this->markAlertAsSent($userId, $signature);
     }
 
-    public function inactivity(int $days): void {
+    public function inactivity(int $userId, int $days): void {
         $key = $days >= 48 ? 'inactivity_48h' : 'inactivity_24h';
         $signature = $this->createAlertSignature($key, null, null, date('Y-m-d'));
-        if ($this->isAlertAlreadySent($signature)) return;
+        if ($this->isAlertAlreadySent($userId, $signature)) return;
 
         $text = $this->renderTemplate($key, []);
-        if ($this->sendMessage($text)) $this->markAlertAsSent($signature);
+        if ($this->sendMessage($text)) $this->markAlertAsSent($userId, $signature);
     }
 
-    public function lowSpending(): void {
+    public function lowSpending(int $userId): void {
         $signature = $this->createAlertSignature('low_spending', null, null, date('Y-m-d-H'));
-        if ($this->isAlertAlreadySent($signature)) return;
+        if ($this->isAlertAlreadySent($userId, $signature)) return;
 
         $text = $this->renderTemplate('low_spending', []);
-        if ($this->sendMessage($text)) $this->markAlertAsSent($signature);
+        if ($this->sendMessage($text)) $this->markAlertAsSent($userId, $signature);
     }
 }
 
@@ -232,26 +232,25 @@ class Nikolaii {
 // =============================
 $__nikolaii = new Nikolaii();
 
-function alertLargeExpense(array $expense): void {
-    global $__nikolaii; $__nikolaii->largeExpense($expense);
+function alertLargeExpense(int $userId, array $expense): void {
+    global $__nikolaii; $__nikolaii->largeExpense($userId, $expense);
 }
-function alertBudgetWarning(string $category, float $percentage): void {
-    global $__nikolaii; $__nikolaii->budgetWarning($category, $percentage);
+function alertBudgetWarning(int $userId, string $category, float $percentage): void {
+    global $__nikolaii; $__nikolaii->budgetWarning($userId, $category, $percentage);
 }
-function alertBudgetExceeded(string $category, float $percentage): void {
-    global $__nikolaii; $__nikolaii->budgetExceeded($category, $percentage);
+function alertBudgetExceeded(int $userId, string $category, float $percentage): void {
+    global $__nikolaii; $__nikolaii->budgetExceeded($userId, $category, $percentage);
 }
-function alertGlobalBudgetExceeded(float $total, float $budget): void {
-    global $__nikolaii; $__nikolaii->globalBudget($total, $budget);
+function alertGlobalBudgetExceeded(int $userId, float $total, float $budget): void {
+    global $__nikolaii; $__nikolaii->globalBudget($userId, $total, $budget);
 }
-function alertLowSpending(): void {
-    global $__nikolaii; $__nikolaii->lowSpending();
+function alertLowSpending(int $userId): void {
+    global $__nikolaii; $__nikolaii->lowSpending($userId);
 }
 
 // Vérifications périodiques (déclenchées par l'app après actions)
-function checkInactivityAlerts(): void {
+function checkInactivityAlerts(int $userId): void {
     // Pas de dépense depuis X jours -> notifier
-    $userId = ensure_default_user();
     $expenses = fetchExpenses($userId);
     $days = 0;
     if (!empty($expenses)) {
@@ -262,19 +261,19 @@ function checkInactivityAlerts(): void {
         $days = 7;
     }
     if ($days >= 7) {
-        global $__nikolaii; $__nikolaii->inactivity($days);
+        global $__nikolaii; $__nikolaii->inactivity($userId, $days);
         insertAlert($userId, 'inactivity', "Plus de dépenses depuis $days jours.");
     }
 }
 
-function checkAndSendAlerts(): void {
+function checkAndSendAlerts(?int $userId = null): void {
     // anti-fréquence: pas plus d'une vérif/30s
+    $userId = $userId ?: getContextUserId();
     $now = time();
-    $lastCheck = getMeta('last_alert_check');
+    $lastCheck = getMeta('last_alert_check', '', $userId);
     if ($lastCheck && ($now - intval($lastCheck)) < 30) return;
-    setMeta('last_alert_check', $now);
+    setMeta('last_alert_check', $now, $userId);
 
-    $userId = ensure_default_user();
     $budgets = getBudgets($userId);
     $expenses = fetchExpenses($userId);
 
@@ -282,7 +281,7 @@ function checkAndSendAlerts(): void {
     $hourlyAlertTypes = ['large_expense', 'budget_warning', 'budget_exceeded', 'global_budget'];
 
     // Get current alert type in rotation
-    $currentAlertIndex = intval(getMeta('current_alert_rotation') ?? 0);
+    $currentAlertIndex = intval(getMeta('current_alert_rotation', 0, $userId) ?? 0);
     $currentAlertType = $hourlyAlertTypes[$currentAlertIndex];
 
     // Check if today is an active day (every 2 days: even day of year)
@@ -301,7 +300,7 @@ function checkAndSendAlerts(): void {
         // 0) Dépenses importantes
         foreach ($expenses as $expense) {
             if ($expense['amount'] > 10000) {
-                alertLargeExpense($expense);
+                alertLargeExpense($userId, $expense);
                 insertAlert($userId, 'large_expense', "Dépense de " . formatCurrency($expense['amount']) . " en " . $expense['category']);
                 $alertSent = true;
                 break; // Send only one large expense alert per hour
@@ -320,7 +319,7 @@ function checkAndSendAlerts(): void {
             }
             $pct = ($spent / $budget) * 100.0;
             if ($pct >= 80 && $pct < 100) {
-                alertBudgetWarning($category, $pct);
+                alertBudgetWarning($userId, $category, $pct);
                 insertAlert($userId, 'budget_warning', "Attention: $category à " . number_format($pct, 1) . "% du budget.");
                 $alertSent = true;
                 break; // Send only one budget warning per hour
@@ -339,7 +338,7 @@ function checkAndSendAlerts(): void {
             }
             $pct = ($spent / $budget) * 100.0;
             if ($pct >= 100) {
-                alertBudgetExceeded($category, $pct);
+                alertBudgetExceeded($userId, $category, $pct);
                 insertAlert($userId, 'budget_exceeded', "Budget $category dépassé de " . number_format($pct, 1) . "%.");
                 $alertSent = true;
                 break; // Send only one budget exceeded alert per hour
@@ -349,12 +348,12 @@ function checkAndSendAlerts(): void {
 
     if ($is_active_day && $is_active_hour && $currentAlertType === 'global_budget' && !$alertSent) {
         // 2) Dépassement budget global
-        $meta = getMeta('monthly_budget');
+        $meta = getMeta('monthly_budget', '', $userId);
         $monthlyBudget = $meta ? floatval($meta) : 0.0;
         $total = 0.0;
         foreach ($expenses as $e) $total += floatval($e['amount']);
         if ($monthlyBudget > 0 && $total > $monthlyBudget) {
-            alertGlobalBudgetExceeded($total, $monthlyBudget);
+            alertGlobalBudgetExceeded($userId, $total, $monthlyBudget);
             insertAlert($userId, 'global_budget_exceeded', "Budget global dépassé.");
             $alertSent = true;
         }
@@ -362,7 +361,7 @@ function checkAndSendAlerts(): void {
 
     // Rotate to next alert type for next hour
     $nextIndex = ($currentAlertIndex + 1) % count($hourlyAlertTypes);
-    setMeta('current_alert_rotation', $nextIndex);
+    setMeta('current_alert_rotation', $nextIndex, $userId);
 
     // ===== IMMEDIATE ALERTS (sent right away) =====
 
@@ -377,7 +376,7 @@ function checkAndSendAlerts(): void {
             }
         }
         if ($totalWeek < 5000) {
-            alertLowSpending();
+            alertLowSpending($userId);
             insertAlert($userId, 'low_spending', "Dépenses faibles cette semaine.");
         }
     }
@@ -386,22 +385,21 @@ function checkAndSendAlerts(): void {
     $today = date('Y-m-d');
 
     // Vérifier les dépenses journalières (immediate)
-    checkDailyExpenses($nikolaii);
+    checkDailyExpenses($nikolaii, $userId);
 
     // Vérifier les objectifs d'épargne (immediate)
-    checkSavingGoals($nikolaii);
+    checkSavingGoals($nikolaii, $userId);
 
     // 4) Inactivité (immediate)
-    checkInactivityAlerts();
+    checkInactivityAlerts($userId);
 }
 
-function checkDailyExpenses($nikolaii) {
-    $userId = ensure_default_user();
+function checkDailyExpenses($nikolaii, int $userId) {
     $expenses = fetchExpenses($userId);
     if (empty($expenses)) return;
-    $lastCheck = getMeta('last_daily_check');
+    $lastCheck = getMeta('last_daily_check', '', $userId);
     if ($lastCheck && (time() - intval($lastCheck) < 14400)) return;
-    setMeta('last_daily_check', time());
+    setMeta('last_daily_check', time(), $userId);
     $today = date('Y-m-d');
     $dailyTotal = 0;
     foreach ($expenses as $expense) {
@@ -424,14 +422,13 @@ function checkDailyExpenses($nikolaii) {
         insertAlert($userId, 'daily_warning', "Attention: " . formatCurrency($dailyTotal) . " dépensés aujourd'hui.");
     }
 }
-function checkSavingGoals($nikolaii) {
-    $userId = ensure_default_user();
-    $goals = getMeta('saving_goals');
+function checkSavingGoals($nikolaii, int $userId) {
+    $goals = getMeta('saving_goals', '', $userId);
     $goalsArr = $goals ? json_decode($goals, true) : [];
     if (empty($goalsArr)) return;
-    $lastCheck = getMeta('last_goals_check');
+    $lastCheck = getMeta('last_goals_check', '', $userId);
     if ($lastCheck && (time() - intval($lastCheck) < 86400)) return;
-    setMeta('last_goals_check', time());
+    setMeta('last_goals_check', time(), $userId);
     foreach ($goalsArr as $goal) {
         $percentage = ($goal['current'] / $goal['target']) * 100;
         if ($percentage >= 100) {

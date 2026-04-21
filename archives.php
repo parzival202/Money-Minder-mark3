@@ -1,22 +1,38 @@
 <?php
 // archives.php
+require_once __DIR__ . '/auth.php';
+requireAuth();
+
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/telegram_bot.php';
 
 // Initialisation base de données et utilisateur par défaut
 init_db();
-$user_id = ensure_default_user();
+$user_id = getCurrentUserId();
 
 // Récupération des archives uniquement via la base de données persistante
 $__archives_by_month = [];
 $db_archives = fetchArchives($user_id);
 foreach ($db_archives as $arc) {
-    $data = $arc['data'] ?? [];
+    $data = decodeArchiveData($arc);
+    $monthlyBudget = (float)($data['monthly_budget'] ?? array_sum($data['budgets'] ?? []));
+    $periodStart = $data['period_start'] ?? null;
+    $periodEnd = $data['period_end'] ?? null;
+    $days = 30;
+    if ($periodStart && $periodEnd) {
+        $startDate = new DateTime($periodStart);
+        $endDate = new DateTime($periodEnd);
+        $days = max(((int)$startDate->diff($endDate)->days + 1), 1);
+    }
     $__archives_by_month[$arc['id']] = [
-        'label' => $arc['month_year'],
+        'label' => $data['display_label'] ?? $arc['month_year'],
         'categories' => $data['budgets'] ?? [],
-        'total' => $arc['total_expenses'] ?? array_sum($data['budgets'] ?? []),
-        'days' => 30 // Optionally compute days if needed
+        'total' => (float)($arc['total_expenses'] ?? array_sum($data['budgets'] ?? [])),
+        'days' => $days,
+        'monthly_budget' => $monthlyBudget,
+        'savings' => max($monthlyBudget - (float)($arc['total_expenses'] ?? 0), 0),
+        'period_start' => $periodStart,
+        'period_end' => $periodEnd,
     ];
 }
 uasort($__archives_by_month, function($a,$b){ return strcmp($b['label'],$a['label']); });
@@ -88,12 +104,15 @@ uasort($__archives_by_month, function($a,$b){ return strcmp($b['label'],$a['labe
                             <?php foreach ($__archives_by_month as $__k => $__arc):
                                 $__labels = array_keys($__arc['categories']);
                                 $__values = array_values($__arc['categories']);
-                                $__savings = max(0, (isset($_SESSION['monthly_budget']) ? floatval($_SESSION['monthly_budget']) : 0) - $__arc['total']);
+                                $__savings = $__arc['savings'];
                                 $__avg = $__arc['days'] > 0 ? ($__arc['total'] / $__arc['days']) : 0;
                             ?>
                                 <div id="archive_<?php echo $__k; ?>" class="archive-detail card mb-3" style="display:none;">
                                     <div class="card-body">
                                         <h5 class="card-title"><?php echo htmlspecialchars($__arc['label']); ?></h5>
+                                        <?php if (!empty($__arc['period_start']) && !empty($__arc['period_end'])): ?>
+                                        <p class="text-muted small mb-3">Période : <?php echo htmlspecialchars($__arc['period_start']); ?> au <?php echo htmlspecialchars($__arc['period_end']); ?></p>
+                                        <?php endif; ?>
                                         <div class="row g-3 align-items-center">
                                             <div class="col-6">
                                                 <div class="chart-container">
@@ -102,6 +121,7 @@ uasort($__archives_by_month, function($a,$b){ return strcmp($b['label'],$a['labe
                                             </div>
                                             <div class="col-6">
                                                 <ul class="list-group">
+                                                    <li class="list-group-item d-flex justify-content-between"><span>Budget mensuel</span><strong><?php echo formatCurrency($__arc['monthly_budget']); ?></strong></li>
                                                     <li class="list-group-item d-flex justify-content-between"><span>Total dépensé</span><strong><?php echo formatCurrency($__arc['total']); ?></strong></li>
                                                     <li class="list-group-item d-flex justify-content-between"><span>Total économisé</span><strong><?php echo formatCurrency($__savings); ?></strong></li>
                                                     <li class="list-group-item d-flex justify-content-between"><span>Dépenses moy. / jour</span><strong><?php echo formatCurrency(round($__avg)); ?></strong></li>
@@ -153,6 +173,8 @@ function showArchive(id){
     var el = document.getElementById('archive_'+id);
     if(el) el.style.display='block';
 }
+
+document.querySelector('#archive-months-list .list-group-item')?.click();
 
 document.getElementById('archive-current-btn').addEventListener('click', function() {
     if (confirm('Êtes-vous sûr de vouloir archiver le mois actuel ? Cette action est irréversible.')) {

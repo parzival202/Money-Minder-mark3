@@ -4,11 +4,13 @@ header('Content-Type: application/json');
 
 // Définir le fuseau horaire d'Abidjan (GMT+0)
 date_default_timezone_set('Africa/Abidjan');
+require_once __DIR__ . '/../auth.php';
+requireAuth();
 
 // Initialisation base de données et utilisateur par défaut
 require_once __DIR__ . '/../db.php';
 init_db();
-$user_id = ensure_default_user();
+$user_id = getCurrentUserId();
 
 // =============================
 // Notification et Telegram Bot
@@ -20,7 +22,7 @@ if (!isset($__nikolaii)) {
 }
 
 // Check and send alerts
-checkAndSendAlerts();
+checkAndSendAlerts($user_id);
 
 // Fetch updated alerts
 $alerts = fetchAlerts($user_id);
