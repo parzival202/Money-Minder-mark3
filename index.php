@@ -18,6 +18,7 @@ if (userNeedsBudgetSetup($user_id)) {
     exit;
 }
 
+require_once __DIR__ . '/budget_algorithm.php';
 
 require_once __DIR__ . '/telegram_bot.php';
 global $__nikolaii;
@@ -119,6 +120,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (isset($_POST['monthly_budget'])) setMeta('monthly_budget', floatval($_POST['monthly_budget']), $user_id);
         header('Location: ' . $_SERVER['PHP_SELF'] . '?budgets_updated=1&tab=budgets'); exit;
     }
+
+    if (isset($_POST['recalibrate_budget'])) {
+    $new_monthly = floatval($_POST['recal_monthly_budget']);
+    $new_savings = floatval($_POST['recal_savings_goal']);
+    if ($new_monthly > 0) {
+        applyOptimalBudgets($user_id, $new_monthly, $new_savings, true);
+    }
+    header('Location: ' . $_SERVER['PHP_SELF'] . '?recalibrated=1&tab=budgets'); exit;
+}
 
     if (isset($_POST['delete_expense'])) {
         deleteExpense($user_id, $_POST['delete_expense']);
@@ -410,6 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (p.has('debt_added'))      showToast('Dette ajoutée !');
     if (p.has('debt_paid'))       showToast('Remboursement enregistré !');
     if (p.has('debt_deleted'))    showToast('Dette supprimée.', 'warning');
+    if (p.has('recalibrated')) showToast('Budgets recalibrés avec la règle 50/30/20 ! ✨')
 });
 </script>
 
@@ -671,6 +682,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="d-flex gap-2 mt-2">
                     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editBudgetsModal"><i class="fas fa-edit me-1"></i>Modifier</button>
                     <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addBudgetCategoryModal"><i class="fas fa-plus me-1"></i>Ajouter</button>
+                    <button class="btn btn-outline-info btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#recalibrateBudgetModal">
+                            <i class="fas fa-sliders-h me-1"></i>Recalibrer 50/30/20
+                    </button>
                 </div>
             </div>
         </div>
@@ -1357,6 +1373,8 @@ function addNewGoal() {
 }
 function removeGoal(btn) { btn.closest('.goal-item').remove(); }
 </script>
+
+<?php include __DIR__ . '/recalibrate_budget_modal.php'; ?>
 
 </body>
 </html>

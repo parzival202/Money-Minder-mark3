@@ -7,6 +7,8 @@ requireAuth();
 require_once __DIR__ . '/db.php';
 init_db();
 
+require_once __DIR__ . '/budget_algorithm.php';
+
 $user_id = getCurrentUserId();
 $current_user = fetchUserById($user_id);
 ensureUserBudgetMetaConsistency($user_id);
@@ -27,7 +29,7 @@ $error = null;
 $submittedMonthlyBudget = isset($_POST['monthly_budget']) ? (float)$_POST['monthly_budget'] : $defaultMonthlyBudget;
 $submittedSavings = isset($_POST['saving_amount']) ? (float)$_POST['saving_amount'] : $defaultSavings;
 $suggestedBudgets = suggestBudgetsFromMonthlyTarget($submittedMonthlyBudget, $submittedSavings);
-$budgetInputs = $suggestedBudgets;
+        $budgetInputs = $suggestedBudgets;
 
 if (!empty($_POST['budgets']) && is_array($_POST['budgets'])) {
     foreach ($_POST['budgets'] as $category => $amount) {
@@ -41,26 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $monthlyBudget = max((float)($_POST['monthly_budget'] ?? 0), 0);
         $savingAmount = max((float)($_POST['saving_amount'] ?? 0), 0);
-        $finalBudgets = [];
-        foreach (($template['category_ratios'] + ['Épargne' => 0]) as $category => $_ratio) {
-            $finalBudgets[$category] = max((float)($_POST['budgets'][$category] ?? 0), 0);
-        }
-        $finalBudgets['Épargne'] = $savingAmount;
-        $budgetTotal = array_sum($finalBudgets);
 
         if ($monthlyBudget <= 0) {
             $error = 'Veuillez définir un budget mensuel supérieur à 0.';
         } elseif ($savingAmount > $monthlyBudget) {
             $error = 'L’épargne ne peut pas dépasser le budget mensuel.';
-        } elseif (abs($budgetTotal - $monthlyBudget) > 1) {
-            $error = 'La somme des catégories doit correspondre au budget total.';
         } else {
+            applyOptimalBudgets($user_id, $monthlyBudget, $savingAmount, false);
             setMeta('monthly_budget', $monthlyBudget, $user_id);
-            setBudgets($user_id, $finalBudgets);
             header('Location: index.php?budgets_updated=1');
             exit;
         }
-        $budgetInputs = $finalBudgets;
     }
 }
 
