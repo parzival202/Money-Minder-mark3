@@ -38,45 +38,6 @@ if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
     if ($archiveResult['success']) {
         $__nikolaii->sendMessage(buildArchiveSummaryMessage($archiveResult));
     }
-    if (false) {
-    $start       = (clone $now)->modify('first day of this month')->modify('-1 month')
-                    ->setDate($now->format('Y'), $now->format('m') - 1 <= 0 ? 12 : $now->format('m') - 1, 27);
-    $end         = (clone $now)->setDate($now->format('Y'), $now->format('m'), 26);
-    $cycle_label = $end->format('Y-m');
-
-    $existing_archives = fetchArchives($user_id);
-    $already_archived  = false;
-    foreach ($existing_archives as $arc) {
-        if ($arc['month_year'] === $cycle_label) { $already_archived = true; break; }
-    }
-
-    if (!$already_archived) {
-        global $pdo;
-        $stmt = $pdo->prepare("SELECT * FROM expenses WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date DESC, id DESC");
-        $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
-        $expenses_arc = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        $budgets_arc  = getBudgets($user_id);
-        $total_arc    = 0;
-        $savings_arc  = $budgets_arc['Épargne'] ?? 0;
-        foreach ($expenses_arc as $e) $total_arc += floatval($e['amount']);
-
-        saveArchive($user_id, $cycle_label, ['budgets' => $budgets_arc, 'expenses' => $expenses_arc], $total_arc);
-
-        foreach ($budgets_arc as $cat => &$amt) { if ($cat !== 'Épargne') $amt = 0; }
-        setBudgets($user_id, $budgets_arc);
-
-        $stmt = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND date >= ? AND date <= ?");
-        $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
-
-        $month_label = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
-        $emojis = ['🎉','📦','✅','📖','🥳'];
-        $msgs = [
-            "Mois archivé ! $month_label : " . formatCurrency($total_arc) . " dépensés, " . formatCurrency($savings_arc) . " épargnés. " . $emojis[array_rand($emojis)],
-            "C'est dans la boîte ! $month_label archivé. Dépenses : " . formatCurrency($total_arc) . ", Épargne : " . formatCurrency($savings_arc) . ". " . $emojis[array_rand($emojis)],
-        ];
-        $__nikolaii->sendMessage($msgs[array_rand($msgs)]);
-    }
-    }
 }
 
 // ============================================================
@@ -206,44 +167,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: ' . $_SERVER['PHP_SELF'] . '?already_archived=1'); exit;
         }
         header('Location: ' . $_SERVER['PHP_SELF'] . '?tab=dashboard'); exit;
-        if (false) {
-        $start = (new DateTime())->modify('first day of this month')->modify('-1 month')
-                    ->setDate((new DateTime())->format('Y'), (new DateTime())->format('m') - 1 <= 0 ? 12 : (new DateTime())->format('m') - 1, 27);
-        $end   = (new DateTime())->setDate((new DateTime())->format('Y'), (new DateTime())->format('m'), 26);
-        $cycle_label = $end->format('Y-m');
-
-        $existing_archives = fetchArchives($user_id);
-        $already_archived  = false;
-        foreach ($existing_archives as $arc) {
-            if ($arc['month_year'] === $cycle_label) { $already_archived = true; break; }
-        }
-
-        if (!$already_archived) {
-            global $pdo;
-            $stmt = $pdo->prepare("SELECT * FROM expenses WHERE user_id = ? AND date >= ? AND date <= ? ORDER BY date DESC, id DESC");
-            $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
-            $expenses_cycle   = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            $budgets_snapshot = getBudgets($user_id);
-            $total_cycle      = 0;
-            $savings_cycle    = $budgets_snapshot['Épargne'] ?? 0;
-            foreach ($expenses_cycle as $e) $total_cycle += floatval($e['amount']);
-
-            saveArchive($user_id, $cycle_label, ['budgets' => $budgets_snapshot, 'expenses' => $expenses_cycle], $total_cycle);
-            foreach ($budgets_snapshot as $cat => &$amt) { if ($cat !== 'Épargne') $amt = 0; }
-            setBudgets($user_id, $budgets_snapshot);
-
-            $stmt = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND date >= ? AND date <= ?");
-            $stmt->execute([$user_id, $start->format('Y-m-d'), $end->format('Y-m-d')]);
-
-            $month_label = $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y');
-            $emojis = ['🎉','📦','✅','📖','🥳'];
-            $__nikolaii->sendMessage("Mois archivé ! $month_label : " . formatCurrency($total_cycle) . " dépensés, " . formatCurrency($savings_cycle) . " épargnés. " . $emojis[array_rand($emojis)]);
-
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?archived=1'); exit;
-        } else {
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?already_archived=1'); exit;
-        }
-        }
     }
 
     // ── Dettes ──────────────────────────────────────────────
@@ -303,9 +226,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // ============================================================
 $expenses = fetchExpenses($user_id);
 $budgets  = getBudgets($user_id);
+if (isset($budgets['Ã‰pargne'])) { $budgets['Épargne'] = ($budgets['Épargne'] ?? 0) + (float)$budgets['Ã‰pargne']; unset($budgets['Ã‰pargne']); setBudgets($user_id, $budgets); }
 if (!isset($budgets['Épargne'])) { $budgets['Épargne'] = 50000; setBudgets($user_id, $budgets); }
-$alerts   = fetchAlerts($user_id);
 $debts    = fetchDebts($user_id);
+$alerts = fetchAlerts($user_id);
 
 // Dépenses de la semaine
 $weekDays     = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
@@ -403,6 +327,17 @@ $savings_badge_class = 'bg-success';
 if ($current_savings < $previous_savings) {
     $ratio = ($previous_savings - $current_savings) / max($previous_savings, 1);
     $savings_badge_class = $ratio > 0.2 ? 'bg-danger' : 'bg-warning';
+}
+$expenseChartLabels = array_values(array_keys($budgets));
+$expenseChartData   = array_map(fn($category) => calculateCategoryExpenses($category, $user_id), $expenseChartLabels);
+$budgetChartLabels  = [];
+$budgetChartData    = [];
+$spentChartData     = [];
+foreach ($budgets as $category => $budgetAmount) {
+    if ((float)$budgetAmount <= 0) continue;
+    $budgetChartLabels[] = $category;
+    $budgetChartData[]   = (float)$budgetAmount;
+    $spentChartData[]    = calculateCategoryExpenses($category, $user_id);
 }
 ?>
 <!DOCTYPE html>
@@ -1334,8 +1269,8 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(expCtx, {
             type: 'pie',
             data: {
-                labels: [<?php echo implode(',', array_map(fn($c) => "'" . addslashes($c) . "'", array_keys($budgets))); ?>],
-                datasets: [{ data: [<?php echo implode(',', array_map(fn($c) => calculateCategoryExpenses($c, $user_id), array_keys($budgets))); ?>], backgroundColor: [<?php echo "'" . implode("','", $chartColors) . "'"; ?>] }]
+                labels: <?php echo json_encode($expenseChartLabels, JSON_UNESCAPED_UNICODE); ?>,
+                datasets: [{ data: <?php echo json_encode($expenseChartData); ?>, backgroundColor: <?php echo json_encode($chartColors); ?> }]
             },
             options: opts
         });
@@ -1347,10 +1282,10 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(budCtx, {
             type: 'bar',
             data: {
-                labels: [<?php $bl=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bl[]=$c;} echo implode(',', array_map(fn($c)=>"'".addslashes($c)."'", $bl)); ?>],
+                labels: <?php echo json_encode($budgetChartLabels, JSON_UNESCAPED_UNICODE); ?>,
                 datasets: [
-                    { label:'Budget',  data:[<?php $bd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$bd[]=floatval($b);} echo implode(',',$bd); ?>], backgroundColor:'#60A5FA' },
-                    { label:'Dépensé', data:[<?php $sd=[]; foreach($budgets as $c=>$b){if(floatval($b)>0)$sd[]=calculateCategoryExpenses($c, $user_id);} echo implode(',',$sd); ?>], backgroundColor:'#e74c3c' }
+                    { label:'Budget',  data: <?php echo json_encode($budgetChartData); ?>, backgroundColor:'#60A5FA' },
+                    { label:'Dépensé', data: <?php echo json_encode($spentChartData); ?>, backgroundColor:'#e74c3c' }
                 ]
             },
             options: { ...opts, scales:{ y:{ beginAtZero:true } } }
@@ -1363,8 +1298,8 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(catCtx, {
             type: 'doughnut',
             data: {
-                labels: [<?php echo implode(',', array_map(fn($c) => "'" . addslashes($c) . "'", array_keys($budgets))); ?>],
-                datasets: [{ data: [<?php echo implode(',', array_map(fn($c) => calculateCategoryExpenses($c, $user_id), array_keys($budgets))); ?>], backgroundColor: [<?php echo "'" . implode("','", $chartColors) . "'"; ?>] }]
+                labels: <?php echo json_encode($expenseChartLabels, JSON_UNESCAPED_UNICODE); ?>,
+                datasets: [{ data: <?php echo json_encode($expenseChartData); ?>, backgroundColor: <?php echo json_encode($chartColors); ?> }]
             },
             options: opts
         });
@@ -1376,8 +1311,8 @@ document.addEventListener('DOMContentLoaded', function () {
         new Chart(dayCtx, {
             type: 'bar',
             data: {
-                labels: [<?php echo '"' . implode('","', $weekDays) . '"'; ?>],
-                datasets: [{ label:'FCFA', data:[<?php echo implode(',', $weekExpenses); ?>], backgroundColor:'#36A2EB' }]
+                labels: <?php echo json_encode($weekDays, JSON_UNESCAPED_UNICODE); ?>,
+                datasets: [{ label:'FCFA', data: <?php echo json_encode($weekExpenses); ?>, backgroundColor:'#36A2EB' }]
             },
             options: { ...opts, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }
         });

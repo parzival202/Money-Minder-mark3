@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-// admin.php — Panneau d'administration MoneyMinder
+// admin.php - Panneau d'administration MoneyMinder
 // ============================================================
 require_once __DIR__ . '/auth.php';
 requireAdmin(); // Redirige vers index.php si pas admin
@@ -11,11 +11,11 @@ $error   = null;
 $success = null;
 $show_self_edit = isset($_GET['edit_self']);
 if (isset($_GET['self_updated'])) {
-    $success = 'Vos identifiants ont bien Ã©tÃ© mis Ã  jour.';
+    $success = 'Vos identifiants ont bien été mis à jour.';
     $show_self_edit = true;
 }
 
-// ── Gestion des actions POST ──────────────────────────────
+// -- Gestion des actions POST ------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
@@ -36,13 +36,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pwd   = $_POST['self_password'] ?? '';
 
         if (mb_strlen($uname) < 3) {
-            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractÃ¨res.';
+            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractères.';
             $show_self_edit = true;
         } elseif ($first === '' || $last === '') {
-            $error = 'Le nom et le prÃ©nom sont obligatoires.';
+            $error = 'Le nom et le prénom sont obligatoires.';
             $show_self_edit = true;
         } elseif ($pwd !== '' && (mb_strlen($pwd) < 8 || !preg_match('/[A-Za-z]/', $pwd) || !preg_match('/[0-9]/', $pwd))) {
-            $error = 'Si renseignÃ©, le mot de passe doit faire au moins 8 caractÃ¨res et contenir une lettre et un chiffre.';
+            $error = 'Si renseigné, le mot de passe doit faire au moins 8 caractères et contenir une lettre et un chiffre.';
             $show_self_edit = true;
         } else {
             $fields = [
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['is_admin'] = true;
                 header('Location: admin.php?edit_self=1&self_updated=1#self-edit-form'); exit;
             } else {
-                $error = 'Impossible de mettre Ã  jour votre compte. Le nom d\'utilisateur existe peut-Ãªtre dÃ©jÃ .';
+                $error = 'Impossible de mettre à jour votre compte. Le nom d\'utilisateur existe peut-être déjà.';
                 $show_self_edit = true;
             }
         }
@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (mb_strlen($uname) < 3) {
             $error = 'Le nom d\'utilisateur doit faire au moins 3 caractères.';
         } elseif ($first === '' || $last === '') {
-            $error = 'Veuillez renseigner le nom et le prÃ©nom.';
+            $error = 'Veuillez renseigner le nom et le prénom.';
         } elseif (mb_strlen($pwd) < 8) {
             $error = 'Le mot de passe doit faire au moins 8 caractères.';
         } elseif (!preg_match('/[A-Za-z]/', $pwd) || !preg_match('/[0-9]/', $pwd)) {
@@ -102,11 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($uid <= 0) {
             $error = 'Utilisateur invalide.';
         } elseif (mb_strlen($uname) < 3) {
-            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractÃ¨res.';
+            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractères.';
         } elseif ($first === '' || $last === '') {
-            $error = 'Le nom et le prÃ©nom sont obligatoires.';
+            $error = 'Le nom et le prénom sont obligatoires.';
         } elseif ($pwd !== '' && (mb_strlen($pwd) < 8 || !preg_match('/[A-Za-z]/', $pwd) || !preg_match('/[0-9]/', $pwd))) {
-            $error = 'Si renseignÃ©, le mot de passe doit faire au moins 8 caractÃ¨res et contenir une lettre et un chiffre.';
+            $error = 'Si renseigné, le mot de passe doit faire au moins 8 caractères et contenir une lettre et un chiffre.';
         } else {
             $fields = [
                 'username' => $uname,
@@ -134,9 +134,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $_SESSION['is_admin'] = true;
                         $show_self_edit = true;
                     }
-                    $success = 'Compte mis Ã  jour avec succÃ¨s.';
+                    $success = 'Compte mis à jour avec succès.';
                 } else {
-                    $error = 'Impossible de mettre Ã  jour ce compte. Le nom d\'utilisateur existe peut-Ãªtre dÃ©jÃ .';
+                    $error = 'Impossible de mettre à jour ce compte. Le nom d\'utilisateur existe peut-être déjà.';
                 }
             }
         }
@@ -168,7 +168,7 @@ $csrf  = generateCsrfToken();
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Administration — MoneyMinder</title>
+    <title>Administration - MoneyMinder</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"/>
     <style>
@@ -218,7 +218,7 @@ $csrf  = generateCsrfToken();
     <div class="d-flex align-items-center gap-3">
         <img src="assets/logo2.png" alt="Logo" height="38">
         <div>
-            <div class="fw-bold fs-5">Money Minder — Admin</div>
+            <div class="fw-bold fs-5">Money Minder - Admin</div>
             <small style="opacity:.8;">Connecté en tant que <strong><?php echo htmlspecialchars($_SESSION['username']); ?></strong></small>
         </div>
     </div>
@@ -302,7 +302,7 @@ $csrf  = generateCsrfToken();
                                 class="form-control"
                                 id="newPassword"
                                 name="new_password"
-                                placeholder="••••••••"
+                                placeholder="********"
                                 minlength="8"
                                 required
                                 oninput="checkStrength(this.value)">

@@ -4,7 +4,6 @@ require_once __DIR__ . '/auth.php';
 requireAuth();
 
 require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/telegram_bot.php';
 
 // Initialisation base de données et utilisateur par défaut
 init_db();

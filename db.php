@@ -299,12 +299,33 @@ function getBudgets($userId) {
     $stmt = $pdo->prepare("SELECT category, amount FROM budgets WHERE user_id = ?");
     $stmt->execute([$userId]);
     $out = [];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) $out[$r['category']] = (float)$r['amount'];
+    $savingsAliases = ['Épargne', 'Ã‰pargne', 'Ãƒâ€°pargne', '?pargne', '??pargne', '?????pargne'];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
+        $category = $r['category'];
+        $amount = (float)$r['amount'];
+        if (in_array($category, $savingsAliases, true)) {
+            $out['Épargne'] = ($out['Épargne'] ?? 0) + $amount;
+            continue;
+        }
+        $out[$category] = $amount;
+    }
+    foreach ($savingsAliases as $alias) {
+        if ($alias !== 'Épargne' && isset($out[$alias])) {
+            unset($out[$alias]);
+        }
+    }
     return $out;
 }
 
 function setBudgets($userId, $budgetsAssoc) {
     global $pdo;
+    $savingsAliases = ['Ã‰pargne', 'Ãƒâ€°pargne', '?pargne', '??pargne', '?????pargne'];
+    foreach ($savingsAliases as $alias) {
+        if (isset($budgetsAssoc[$alias])) {
+            $budgetsAssoc['Épargne'] = ($budgetsAssoc['Épargne'] ?? 0) + (float)$budgetsAssoc[$alias];
+            unset($budgetsAssoc[$alias]);
+        }
+    }
     $ownsTransaction = !$pdo->inTransaction();
     if ($ownsTransaction) {
         $pdo->beginTransaction();

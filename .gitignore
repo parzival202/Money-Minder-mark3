@@ -2,3 +2,6 @@ config.php
 data/app.db
 data.sqlite
 todo.md
+data/sessions/
+.env
+*.log
