@@ -190,3 +190,4 @@ function getImpersonatedUsername(): string {
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     return getUserDisplayName($user);
 }
+?>

@@ -573,6 +573,7 @@ function openEditUserModal(button) {
     modal.show();
     return false;
 }
+?>
 </script>
 </body>
 </html>

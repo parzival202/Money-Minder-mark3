@@ -27,8 +27,6 @@
 //
 // 5. Include ce fichier juste avant </body> dans index.php :
 //    <?php include __DIR__ . '/recalibrate_budget_modal.php'; ?>
-// ============================================================
-?>
 
 <!-- Modal Recalibrage Budgétaire -->
 <div class="modal fade" id="recalibrateBudgetModal" tabindex="-1" aria-labelledby="recalibrateBudgetLabel">

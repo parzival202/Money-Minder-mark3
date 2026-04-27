@@ -767,3 +767,4 @@ function migrateSessionDataToDb($userId) {
     }
 }
 init_db();
+?>
