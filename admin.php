@@ -29,6 +29,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         unset($_SESSION['impersonate_user_id']);
         header('Location: admin.php'); exit;
 
+    } elseif (isset($_POST['update_telegram'])) {
+        $uid       = intval($_POST['telegram_user_id'] ?? 0);
+        $bot_token = trim($_POST['telegram_bot_token'] ?? '');
+        $chat_id   = trim($_POST['telegram_chat_id'] ?? '');
+
+        if ($uid > 0) {
+            setMeta('telegram_bot_token', $bot_token, $uid);
+            setMeta('telegram_chat_id',   $chat_id,   $uid);
+
+            $test_result = null;
+            $successMsg  = 'Configuration Telegram mise à jour.';
+
+            if (!empty($bot_token) && !empty($chat_id)) {
+                require_once __DIR__ . '/telegram_bot.php';
+                $sent = $__nikolaii->sendMessage(
+                    '✅ MoneyMinder connecté ! Nikolaii est prêt à te surveiller 🐀',
+                    $uid
+                );
+                $test_result = $sent ? 'success' : 'error';
+            }
+
+            $success = $successMsg;
+            if ($test_result === 'success') {
+                $success .= ' Message de test envoyé !';
+            } elseif ($test_result === 'error') {
+                $success .= ' ⚠️ Échec du message de test — vérifiez le token et le chat_id.';
+            }
+        }
+
     } elseif (isset($_POST['update_self_account'])) {
         $uname = trim($_POST['self_username'] ?? '');
         $first = trim($_POST['self_first_name'] ?? '');
@@ -452,6 +481,21 @@ $csrf  = generateCsrfToken();
                                             <i class="fas fa-eye me-1"></i>Voir
                                         </button>
                                     </form>
+
+                                    <!-- Telegram -->
+                                    <?php if (!$is_me): ?>
+                                        <button class="btn btn-outline-info btn-action"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#telegramModal"
+                                                data-uid="<?php echo $u['id']; ?>"
+                                                data-username="<?php echo htmlspecialchars($u['username']); ?>"
+                                                data-token="<?php echo htmlspecialchars(getMeta('telegram_bot_token', '', $u['id'])); ?>"
+                                                data-chatid="<?php echo htmlspecialchars(getMeta('telegram_chat_id', '', $u['id'])); ?>"
+                                                title="Configurer Telegram">
+                                            <i class="fab fa-telegram"></i>
+                                        </button>
+                                    <?php endif; ?>
+
                                     <!-- Supprimer -->
                                     <form method="POST" class="d-inline"
                                           onsubmit="return confirm('Supprimer « <?php echo htmlspecialchars($u['username']); ?> » et toutes ses données ? Cette action est irréversible.')">
@@ -520,6 +564,60 @@ $csrf  = generateCsrfToken();
     </div>
 </div>
 
+<!-- Modal configuration Telegram -->
+<div class="modal fade" id="telegramModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" class="modal-content">
+            <div class="modal-header" style="background:linear-gradient(135deg,#0088cc,#006699);">
+                <h5 class="modal-title text-white fw-bold">
+                    <i class="fab fa-telegram me-2"></i>Configuration Telegram
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" name="telegram_user_id" id="telegramUserId">
+                <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
+
+                <p class="text-muted small mb-3">
+                    Utilisateur : <strong id="telegramUsername"></strong>
+                </p>
+
+                <div class="alert alert-info py-2" style="font-size:.85rem;">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <strong>Comment obtenir le chat_id ?</strong><br>
+                    1. Crée un bot via <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → copie le token<br>
+                    2. Envoie un message au bot depuis le compte Telegram de l'utilisateur<br>
+                    3. Visite <code>https://api.telegram.org/bot<b>TOKEN</b>/getUpdates</code> → note le <code>chat.id</code>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Bot Token</label>
+                    <input type="text" class="form-control form-control-sm font-monospace"
+                           name="telegram_bot_token" id="telegramBotToken"
+                           placeholder="123456789:AAF...">
+                    <small class="text-muted">Fourni par @BotFather lors de la création du bot.</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small">Chat ID</label>
+                    <input type="text" class="form-control form-control-sm font-monospace"
+                           name="telegram_chat_id" id="telegramChatId"
+                           placeholder="123456789">
+                    <small class="text-muted">ID du chat Telegram de l'utilisateur.</small>
+                </div>
+
+                <div id="telegramStatus" class="d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                <button type="submit" name="update_telegram" class="btn btn-info btn-sm text-white">
+                    <i class="fab fa-telegram me-1"></i>Enregistrer & Tester
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 function toggleNewPwd() {
     const input = document.getElementById('newPassword');
@@ -573,6 +671,27 @@ function openEditUserModal(button) {
     modal.show();
     return false;
 }
+
+// Préremplir le modal Telegram
+document.getElementById('telegramModal')?.addEventListener('show.bs.modal', function(e) {
+    const btn = e.relatedTarget;
+    if (!btn) return;
+
+    document.getElementById('telegramUserId').value  = btn.dataset.uid || '';
+    document.getElementById('telegramUsername').textContent = btn.dataset.username || '';
+    document.getElementById('telegramBotToken').value = btn.dataset.token || '';
+    document.getElementById('telegramChatId').value   = btn.dataset.chatid || '';
+
+    const statusEl = document.getElementById('telegramStatus');
+    if (btn.dataset.token && btn.dataset.chatid) {
+        statusEl.className = 'alert alert-success py-2 small';
+        statusEl.innerHTML = '<i class="fas fa-check-circle me-1"></i>Telegram configuré pour cet utilisateur.';
+    } else {
+        statusEl.className = 'alert alert-warning py-2 small';
+        statusEl.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Telegram non configuré.';
+    }
+    statusEl.classList.remove('d-none');
+});
 ?>
 </script>
 </body>
