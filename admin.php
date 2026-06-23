@@ -3,194 +3,41 @@
 // admin.php - Panneau d'administration MoneyMinder
 // ============================================================
 require_once __DIR__ . '/auth.php';
-requireAdmin(); // Redirige vers index.php si pas admin
 
+requireAdmin();
+
+$adminService = new App\Services\AdminService();
 $current_admin_id = (int)$_SESSION['user_id'];
-$current_admin = fetchUserById($current_admin_id);
-$error   = null;
+$error = null;
 $success = null;
 $show_self_edit = isset($_GET['edit_self']);
+
 if (isset($_GET['self_updated'])) {
     $success = 'Vos identifiants ont bien été mis à jour.';
     $show_self_edit = true;
 }
 
-// -- Gestion des actions POST ------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
         $error = 'Requête invalide. Veuillez réessayer.';
+    } else {
+        $state = $adminService->handle($_POST, $_SESSION, $current_admin_id);
+        $error = $state['error'];
+        $success = $state['success'];
+        $show_self_edit = $show_self_edit || $state['show_self_edit'];
 
-    } elseif (isset($_POST['logout_action'])) {
-        logout();
-        header('Location: login.php'); exit;
-
-    } elseif (isset($_POST['stop_impersonate'])) {
-        unset($_SESSION['impersonate_user_id']);
-        header('Location: admin.php'); exit;
-
-    } elseif (isset($_POST['update_telegram'])) {
-        $uid       = intval($_POST['telegram_user_id'] ?? 0);
-        $bot_token = trim($_POST['telegram_bot_token'] ?? '');
-        $chat_id   = trim($_POST['telegram_chat_id'] ?? '');
-
-        if ($uid > 0) {
-            setMeta('telegram_bot_token', $bot_token, $uid);
-            setMeta('telegram_chat_id',   $chat_id,   $uid);
-
-            $test_result = null;
-            $successMsg  = 'Configuration Telegram mise à jour.';
-
-            if (!empty($bot_token) && !empty($chat_id)) {
-                require_once __DIR__ . '/telegram_bot.php';
-                $sent = $__nikolaii->sendMessage(
-                    '✅ MoneyMinder connecté ! Nikolaii est prêt à te surveiller 🐀',
-                    $uid
-                );
-                $test_result = $sent ? 'success' : 'error';
-            }
-
-            $success = $successMsg;
-            if ($test_result === 'success') {
-                $success .= ' Message de test envoyé !';
-            } elseif ($test_result === 'error') {
-                $success .= ' ⚠️ Échec du message de test — vérifiez le token et le chat_id.';
-            }
-        }
-
-    } elseif (isset($_POST['update_self_account'])) {
-        $uname = trim($_POST['self_username'] ?? '');
-        $first = trim($_POST['self_first_name'] ?? '');
-        $last  = trim($_POST['self_last_name'] ?? '');
-        $pwd   = $_POST['self_password'] ?? '';
-
-        if (mb_strlen($uname) < 3) {
-            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractères.';
-            $show_self_edit = true;
-        } elseif ($first === '' || $last === '') {
-            $error = 'Le nom et le prénom sont obligatoires.';
-            $show_self_edit = true;
-        } elseif ($pwd !== '' && (mb_strlen($pwd) < 8 || !preg_match('/[A-Za-z]/', $pwd) || !preg_match('/[0-9]/', $pwd))) {
-            $error = 'Si renseigné, le mot de passe doit faire au moins 8 caractères et contenir une lettre et un chiffre.';
-            $show_self_edit = true;
-        } else {
-            $fields = [
-                'username' => $uname,
-                'first_name' => $first,
-                'last_name' => $last,
-                'is_admin' => 1,
-            ];
-            if ($pwd !== '') {
-                $fields['password_hash'] = password_hash($pwd, PASSWORD_BCRYPT, ['cost' => 12]);
-            }
-
-            if (updateUserAccount($current_admin_id, $fields)) {
-                $_SESSION['username'] = $uname;
-                $_SESSION['first_name'] = $first;
-                $_SESSION['last_name'] = $last;
-                $_SESSION['is_admin'] = true;
-                header('Location: admin.php?edit_self=1&self_updated=1#self-edit-form'); exit;
-            } else {
-                $error = 'Impossible de mettre à jour votre compte. Le nom d\'utilisateur existe peut-être déjà.';
-                $show_self_edit = true;
-            }
-        }
-
-    } elseif (isset($_POST['create_user'])) {
-        $uname    = trim($_POST['new_username'] ?? '');
-        $first    = trim($_POST['new_first_name'] ?? '');
-        $last     = trim($_POST['new_last_name'] ?? '');
-        $pwd      = $_POST['new_password'] ?? '';
-        $is_admin = isset($_POST['new_is_admin']) ? 1 : 0;
-
-        if (mb_strlen($uname) < 3) {
-            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractères.';
-        } elseif ($first === '' || $last === '') {
-            $error = 'Veuillez renseigner le nom et le prénom.';
-        } elseif (mb_strlen($pwd) < 8) {
-            $error = 'Le mot de passe doit faire au moins 8 caractères.';
-        } elseif (!preg_match('/[A-Za-z]/', $pwd) || !preg_match('/[0-9]/', $pwd)) {
-            $error = 'Le mot de passe doit contenir au moins une lettre et un chiffre.';
-        } else {
-            $new_id = createUser($uname, $pwd, $is_admin, $first, $last);
-            if ($new_id) {
-                $success = "Compte \"" . htmlspecialchars($uname) . "\" créé avec succès.";
-            } else {
-                $error = "Ce nom d'utilisateur existe déjà.";
-            }
-        }
-
-    } elseif (isset($_POST['update_user'])) {
-        $uid      = intval($_POST['edit_user_id'] ?? 0);
-        $uname    = trim($_POST['edit_username'] ?? '');
-        $first    = trim($_POST['edit_first_name'] ?? '');
-        $last     = trim($_POST['edit_last_name'] ?? '');
-        $pwd      = $_POST['edit_password'] ?? '';
-        $is_admin = isset($_POST['edit_is_admin']) ? 1 : 0;
-
-        if ($uid <= 0) {
-            $error = 'Utilisateur invalide.';
-        } elseif (mb_strlen($uname) < 3) {
-            $error = 'Le nom d\'utilisateur doit faire au moins 3 caractères.';
-        } elseif ($first === '' || $last === '') {
-            $error = 'Le nom et le prénom sont obligatoires.';
-        } elseif ($pwd !== '' && (mb_strlen($pwd) < 8 || !preg_match('/[A-Za-z]/', $pwd) || !preg_match('/[0-9]/', $pwd))) {
-            $error = 'Si renseigné, le mot de passe doit faire au moins 8 caractères et contenir une lettre et un chiffre.';
-        } else {
-            $fields = [
-                'username' => $uname,
-                'first_name' => $first,
-                'last_name' => $last,
-            ];
-            if ($pwd !== '') {
-                $fields['password_hash'] = password_hash($pwd, PASSWORD_BCRYPT, ['cost' => 12]);
-            }
-
-            $admin_count = count(array_filter(fetchAllUsers(), fn($u) => (int)$u['is_admin'] === 1));
-            if ($uid === $current_admin_id) {
-                $is_admin = 1;
-            } elseif (!$is_admin && $admin_count <= 1) {
-                $error = 'Il faut conserver au moins un administrateur.';
-            }
-
-            if (!$error) {
-                $fields['is_admin'] = $is_admin;
-                if (updateUserAccount($uid, $fields)) {
-                    if ($uid === $current_admin_id) {
-                        $_SESSION['username'] = $uname;
-                        $_SESSION['first_name'] = $first;
-                        $_SESSION['last_name'] = $last;
-                        $_SESSION['is_admin'] = true;
-                        $show_self_edit = true;
-                    }
-                    $success = 'Compte mis à jour avec succès.';
-                } else {
-                    $error = 'Impossible de mettre à jour ce compte. Le nom d\'utilisateur existe peut-être déjà.';
-                }
-            }
-        }
-
-    } elseif (isset($_POST['delete_user'])) {
-        $uid = intval($_POST['delete_user']);
-        if ($uid === $current_admin_id) {
-            $error = 'Vous ne pouvez pas supprimer votre propre compte.';
-        } else {
-            deleteUser($uid);
-            $success = 'Utilisateur supprimé avec toutes ses données.';
-        }
-
-    } elseif (isset($_POST['impersonate_user'])) {
-        $uid = intval($_POST['impersonate_user']);
-        if ($uid !== $current_admin_id) {
-            $_SESSION['impersonate_user_id'] = $uid;
-            header('Location: index.php'); exit;
+        if (!empty($state['redirect'])) {
+            header('Location: ' . $state['redirect']);
+            exit;
         }
     }
 }
 
-$current_admin = fetchUserById($current_admin_id);
-$users = fetchAllUsers();
-$csrf  = generateCsrfToken();
+$pageData = $adminService->buildPageData($current_admin_id);
+$current_admin = $pageData['current_admin'];
+$users = $pageData['users'];
+$stats = $pageData['stats'];
+$csrf = generateCsrfToken();
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -236,13 +83,11 @@ $csrf  = generateCsrfToken();
 
         .badge-admin { background: #DC2626; }
         .badge-user  { background: #6B7280; }
-
         .password-strength { font-size: .78rem; margin-top: 4px; }
     </style>
 </head>
 <body>
 
-<!-- Header -->
 <div class="admin-header d-flex justify-content-between align-items-center">
     <div class="d-flex align-items-center gap-3">
         <img src="assets/logo2.png" alt="Logo" height="38">
@@ -265,8 +110,6 @@ $csrf  = generateCsrfToken();
 </div>
 
 <div class="container pb-5">
-
-    <!-- Bannière impersonation active -->
     <?php if (isImpersonating()): ?>
     <div class="alert alert-warning d-flex justify-content-between align-items-center mb-4">
         <span><i class="fas fa-eye me-2"></i>Vous consultez actuellement le compte de <strong><?php echo htmlspecialchars(getImpersonatedUsername()); ?></strong>.</span>
@@ -279,349 +122,25 @@ $csrf  = generateCsrfToken();
     </div>
     <?php endif; ?>
 
-    <!-- Alertes -->
-    <?php if ($error): ?>
-    <div class="alert alert-danger d-flex align-items-center gap-2">
-        <i class="fas fa-exclamation-circle"></i><?php echo htmlspecialchars($error); ?>
-    </div>
-    <?php endif; ?>
-    <?php if ($success): ?>
-    <div class="alert alert-success d-flex align-items-center gap-2">
-        <i class="fas fa-check-circle"></i><?php echo htmlspecialchars($success); ?>
-    </div>
-    <?php endif; ?>
+    <?php include __DIR__ . '/views/partials/admin_alerts.php'; ?>
 
     <div class="row">
-
-        <!-- Créer un utilisateur -->
-        <div class="col-md-5">
-            <div class="card p-4">
-                <h6 class="fw-bold mb-3">
-                    <i class="fas fa-user-plus me-2 text-success"></i>Créer un utilisateur
-                </h6>
-                <form method="POST" id="createUserForm" novalidate>
-                    <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Prénom</label>
-                        <input type="text" class="form-control form-control-sm" name="new_first_name" placeholder="ex: Jean" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Nom</label>
-                        <input type="text" class="form-control form-control-sm" name="new_last_name" placeholder="ex: Dupont" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Nom d'utilisateur <span class="text-muted">(min. 3 caractères)</span></label>
-                        <input
-                            type="text"
-                            class="form-control form-control-sm"
-                            name="new_username"
-                            placeholder="ex: jean.dupont"
-                            minlength="3"
-                            required>
-                    </div>
-
-                    <div class="mb-1">
-                        <label class="form-label small fw-semibold">Mot de passe <span class="text-muted">(min. 8 caractères)</span></label>
-                        <div class="input-group input-group-sm">
-                            <input
-                                type="password"
-                                class="form-control"
-                                id="newPassword"
-                                name="new_password"
-                                placeholder="********"
-                                minlength="8"
-                                required
-                                oninput="checkStrength(this.value)">
-                            <button type="button" class="btn btn-outline-secondary" onclick="toggleNewPwd()">
-                                <i class="fas fa-eye" id="newPwdIcon"></i>
-                            </button>
-                        </div>
-                        <div class="password-strength text-muted" id="strengthMsg"></div>
-                    </div>
-
-                    <div class="mb-3 mt-3 form-check">
-                        <input type="checkbox" class="form-check-input" name="new_is_admin" id="newIsAdmin">
-                        <label class="form-check-label small" for="newIsAdmin">
-                            <i class="fas fa-shield-alt me-1 text-danger"></i>Accès administrateur
-                        </label>
-                    </div>
-
-                    <button type="submit" name="create_user" class="btn btn-success btn-sm w-100">
-                        <i class="fas fa-plus me-1"></i>Créer le compte
-                    </button>
-                </form>
-            </div>
-
-            <!-- Statistiques rapides -->
-            <div class="card p-4">
-                <h6 class="fw-bold mb-3"><i class="fas fa-chart-bar me-2 text-primary"></i>Statistiques</h6>
-                <?php
-                $total_users  = count($users);
-                $admin_users  = count(array_filter($users, fn($u) => $u['is_admin']));
-                $normal_users = $total_users - $admin_users;
-                ?>
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Total utilisateurs</span>
-                    <strong><?php echo $total_users; ?></strong>
-                </div>
-                <div class="d-flex justify-content-between mb-2">
-                    <span class="text-muted">Administrateurs</span>
-                    <strong class="text-danger"><?php echo $admin_users; ?></strong>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Utilisateurs normaux</span>
-                    <strong class="text-secondary"><?php echo $normal_users; ?></strong>
-                </div>
-            </div>
-
-            <div class="card p-4">
-                <h6 class="fw-bold mb-3"><i class="fas fa-id-card me-2 text-secondary"></i>Mon compte admin</h6>
-                <div class="small text-muted mb-2">Prénom : <?php echo htmlspecialchars($current_admin['first_name'] ?? ''); ?></div>
-                <div class="small text-muted mb-2">Nom : <?php echo htmlspecialchars($current_admin['last_name'] ?? ''); ?></div>
-                <div class="small text-muted mb-3">Identifiant : <?php echo htmlspecialchars($current_admin['username'] ?? $_SESSION['username']); ?></div>
-                <a
-                    href="admin.php?edit_self=1#self-edit-form"
-                    class="btn btn-outline-secondary btn-sm w-100">
-                    <i class="fas fa-pen me-1"></i>Modifier mes identifiants
-                </a>
-            </div>
-
-            <?php if ($show_self_edit): ?>
-            <div class="card p-4" id="self-edit-form">
-                <h6 class="fw-bold mb-3"><i class="fas fa-user-pen me-2 text-primary"></i>Modifier mon compte</h6>
-                <form method="POST">
-                    <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                    <input type="hidden" name="edit_user_id" value="<?php echo $current_admin_id; ?>">
-
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Prénom</label>
-                        <input type="text" class="form-control form-control-sm" name="self_first_name" value="<?php echo htmlspecialchars($current_admin['first_name'] ?? ''); ?>" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Nom</label>
-                        <input type="text" class="form-control form-control-sm" name="self_last_name" value="<?php echo htmlspecialchars($current_admin['last_name'] ?? ''); ?>" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Nom d'utilisateur</label>
-                        <input type="text" class="form-control form-control-sm" name="self_username" value="<?php echo htmlspecialchars($current_admin['username'] ?? $_SESSION['username']); ?>" minlength="3" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-semibold">Nouveau mot de passe</label>
-                        <input type="password" class="form-control form-control-sm" name="self_password" minlength="8" placeholder="Laisser vide pour conserver l'actuel">
-                    </div>
-                    <button type="submit" name="update_self_account" class="btn btn-primary btn-sm w-100">
-                        <i class="fas fa-save me-1"></i>Enregistrer mes modifications
-                    </button>
-                </form>
-            </div>
-            <?php endif; ?>
-        </div>
-
-        <!-- Liste des utilisateurs -->
-        <div class="col-md-7">
-            <div class="card p-4">
-                <h6 class="fw-bold mb-3">
-                    <i class="fas fa-users me-2 text-primary"></i>
-                    Utilisateurs (<?php echo count($users); ?>)
-                </h6>
-
-                <?php if (empty($users)): ?>
-                    <p class="text-muted">Aucun utilisateur.</p>
-                <?php else: ?>
-                <div class="table-responsive">
-                    <table class="table table-hover table-sm align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Nom complet</th>
-                                <th>Utilisateur</th>
-                                <th>Rôle</th>
-                                <th>Créé le</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        <?php foreach ($users as $u): $is_me = ($u['id'] === $current_admin_id); ?>
-                        <tr <?php echo $is_me ? 'class="table-primary"' : ''; ?>>
-                            <td><span class="fw-semibold"><?php echo htmlspecialchars(getUserDisplayName($u)); ?></span></td>
-                            <td>
-                                <span class="fw-semibold"><?php echo htmlspecialchars($u['username']); ?></span>
-                                <?php if ($is_me): ?><small class="text-muted ms-1">(vous)</small><?php endif; ?>
-                            </td>
-                            <td>
-                                <?php if ($u['is_admin']): ?>
-                                    <span class="badge badge-admin"><i class="fas fa-shield-alt me-1"></i>Admin</span>
-                                <?php else: ?>
-                                    <span class="badge badge-user">User</span>
-                                <?php endif; ?>
-                            </td>
-                            <td><small class="text-muted"><?php echo date('d/m/Y', strtotime($u['created_at'])); ?></small></td>
-                            <td class="text-end">
-                                <?php if (!$is_me): ?>
-                                <div class="d-flex justify-content-end gap-1">
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-secondary btn-action edit-user-trigger"
-                                        onclick="openEditUserModal(this)"
-                                        data-id="<?php echo $u['id']; ?>"
-                                        data-username="<?php echo htmlspecialchars($u['username']); ?>"
-                                        data-first-name="<?php echo htmlspecialchars($u['first_name'] ?? ''); ?>"
-                                        data-last-name="<?php echo htmlspecialchars($u['last_name'] ?? ''); ?>"
-                                        data-is-admin="<?php echo (int)$u['is_admin']; ?>"
-                                        title="Modifier">
-                                        <i class="fas fa-pen"></i>
-                                    </button>
-                                    <!-- Voir le compte de l'utilisateur -->
-                                    <form method="POST" class="d-inline">
-                                        <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                                        <input type="hidden" name="impersonate_user" value="<?php echo $u['id']; ?>">
-                                        <button class="btn btn-outline-primary btn-action" title="Consulter son app">
-                                            <i class="fas fa-eye me-1"></i>Voir
-                                        </button>
-                                    </form>
-
-                                    <!-- Telegram -->
-                                    <?php if (!$is_me): ?>
-                                        <button class="btn btn-outline-info btn-action"
-                                                data-bs-toggle="modal"
-                                                data-bs-target="#telegramModal"
-                                                data-uid="<?php echo $u['id']; ?>"
-                                                data-username="<?php echo htmlspecialchars($u['username']); ?>"
-                                                data-token="<?php echo htmlspecialchars(getMeta('telegram_bot_token', '', $u['id'])); ?>"
-                                                data-chatid="<?php echo htmlspecialchars(getMeta('telegram_chat_id', '', $u['id'])); ?>"
-                                                title="Configurer Telegram">
-                                            <i class="fab fa-telegram"></i>
-                                        </button>
-                                    <?php endif; ?>
-
-                                    <!-- Supprimer -->
-                                    <form method="POST" class="d-inline"
-                                          onsubmit="return confirm('Supprimer « <?php echo htmlspecialchars($u['username']); ?> » et toutes ses données ? Cette action est irréversible.')">
-                                        <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                                        <input type="hidden" name="delete_user" value="<?php echo $u['id']; ?>">
-                                        <button class="btn btn-outline-danger btn-action">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                                <?php else: ?>
-                                    <span class="text-muted" style="font-size:.8rem;">—</span>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
+        <?php include __DIR__ . '/views/partials/admin_sidebar.php'; ?>
+        <?php include __DIR__ . '/views/partials/admin_users_table.php'; ?>
     </div>
 </div>
 
-<div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content border-0" style="border-radius:16px;">
-            <form method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-title">Modifier le compte</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-                    <input type="hidden" name="edit_user_id" id="editUserId">
+<?php include __DIR__ . '/views/partials/admin_modals.php'; ?>
 
-                    <div class="mb-3">
-                        <label class="form-label">Prénom</label>
-                        <input type="text" class="form-control" name="edit_first_name" id="editFirstName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Nom</label>
-                        <input type="text" class="form-control" name="edit_last_name" id="editLastName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Nom d'utilisateur</label>
-                        <input type="text" class="form-control" name="edit_username" id="editUsername" minlength="3" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Nouveau mot de passe</label>
-                        <input type="password" class="form-control" name="edit_password" id="editPassword" minlength="8" placeholder="Laisser vide pour conserver l'actuel">
-                    </div>
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" name="edit_is_admin" id="editIsAdmin">
-                        <label class="form-check-label" for="editIsAdmin">Accès administrateur</label>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-                    <button type="submit" name="update_user" class="btn btn-primary">Enregistrer</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Modal configuration Telegram -->
-<div class="modal fade" id="telegramModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <form method="POST" class="modal-content">
-            <div class="modal-header" style="background:linear-gradient(135deg,#0088cc,#006699);">
-                <h5 class="modal-title text-white fw-bold">
-                    <i class="fab fa-telegram me-2"></i>Configuration Telegram
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" name="telegram_user_id" id="telegramUserId">
-                <input type="hidden" name="csrf_token" value="<?php echo $csrf; ?>">
-
-                <p class="text-muted small mb-3">
-                    Utilisateur : <strong id="telegramUsername"></strong>
-                </p>
-
-                <div class="alert alert-info py-2" style="font-size:.85rem;">
-                    <i class="fas fa-info-circle me-1"></i>
-                    <strong>Comment obtenir le chat_id ?</strong><br>
-                    1. Crée un bot via <a href="https://t.me/BotFather" target="_blank">@BotFather</a> → copie le token<br>
-                    2. Envoie un message au bot depuis le compte Telegram de l'utilisateur<br>
-                    3. Visite <code>https://api.telegram.org/bot<b>TOKEN</b>/getUpdates</code> → note le <code>chat.id</code>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label fw-semibold small">Bot Token</label>
-                    <input type="text" class="form-control form-control-sm font-monospace"
-                           name="telegram_bot_token" id="telegramBotToken"
-                           placeholder="123456789:AAF...">
-                    <small class="text-muted">Fourni par @BotFather lors de la création du bot.</small>
-                </div>
-
-                <div class="mb-3">
-                    <label class="form-label fw-semibold small">Chat ID</label>
-                    <input type="text" class="form-control form-control-sm font-monospace"
-                           name="telegram_chat_id" id="telegramChatId"
-                           placeholder="123456789">
-                    <small class="text-muted">ID du chat Telegram de l'utilisateur.</small>
-                </div>
-
-                <div id="telegramStatus" class="d-none"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
-                <button type="submit" name="update_telegram" class="btn btn-info btn-sm text-white">
-                    <i class="fab fa-telegram me-1"></i>Enregistrer & Tester
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function toggleNewPwd() {
     const input = document.getElementById('newPassword');
-    const icon  = document.getElementById('newPwdIcon');
+    const icon = document.getElementById('newPwdIcon');
+    if (!input || !icon) {
+        return;
+    }
+
     if (input.type === 'password') {
         input.type = 'text';
         icon.classList.replace('fa-eye', 'fa-eye-slash');
@@ -633,21 +152,28 @@ function toggleNewPwd() {
 
 function checkStrength(pwd) {
     const msg = document.getElementById('strengthMsg');
-    if (!pwd) { msg.textContent = ''; return; }
+    if (!msg) {
+        return;
+    }
+
+    if (!pwd) {
+        msg.textContent = '';
+        return;
+    }
 
     let score = 0;
-    if (pwd.length >= 8)  score++;
+    if (pwd.length >= 8) score++;
     if (pwd.length >= 12) score++;
     if (/[A-Z]/.test(pwd)) score++;
     if (/[0-9]/.test(pwd)) score++;
     if (/[^A-Za-z0-9]/.test(pwd)) score++;
 
     const levels = [
-        { text: 'Très faible',  color: '#DC2626' },
-        { text: 'Faible',       color: '#F97316' },
-        { text: 'Moyen',        color: '#EAB308' },
-        { text: 'Fort',         color: '#22C55E' },
-        { text: 'Très fort',    color: '#16A34A' },
+        { text: 'Très faible', color: '#DC2626' },
+        { text: 'Faible', color: '#F97316' },
+        { text: 'Moyen', color: '#EAB308' },
+        { text: 'Fort', color: '#22C55E' },
+        { text: 'Très fort', color: '#16A34A' },
     ];
     const level = levels[Math.min(score, 4)];
     msg.textContent = 'Force : ' + level.text;
@@ -655,6 +181,7 @@ function checkStrength(pwd) {
 }
 
 const editUserModal = document.getElementById('editUserModal');
+
 function fillEditUserModal(button) {
     document.getElementById('editUserId').value = button.getAttribute('data-id') || '';
     document.getElementById('editUsername').value = button.getAttribute('data-username') || '';
@@ -665,24 +192,32 @@ function fillEditUserModal(button) {
 }
 
 function openEditUserModal(button) {
-    if (!editUserModal || !button) return false;
+    if (!editUserModal || !button || typeof bootstrap === 'undefined') {
+        return false;
+    }
+
     fillEditUserModal(button);
     const modal = bootstrap.Modal.getOrCreateInstance(editUserModal);
     modal.show();
     return false;
 }
 
-// Préremplir le modal Telegram
-document.getElementById('telegramModal')?.addEventListener('show.bs.modal', function(e) {
+document.getElementById('telegramModal')?.addEventListener('show.bs.modal', function (e) {
     const btn = e.relatedTarget;
-    if (!btn) return;
+    if (!btn) {
+        return;
+    }
 
-    document.getElementById('telegramUserId').value  = btn.dataset.uid || '';
+    document.getElementById('telegramUserId').value = btn.dataset.uid || '';
     document.getElementById('telegramUsername').textContent = btn.dataset.username || '';
     document.getElementById('telegramBotToken').value = btn.dataset.token || '';
-    document.getElementById('telegramChatId').value   = btn.dataset.chatid || '';
+    document.getElementById('telegramChatId').value = btn.dataset.chatid || '';
 
     const statusEl = document.getElementById('telegramStatus');
+    if (!statusEl) {
+        return;
+    }
+
     if (btn.dataset.token && btn.dataset.chatid) {
         statusEl.className = 'alert alert-success py-2 small';
         statusEl.innerHTML = '<i class="fas fa-check-circle me-1"></i>Telegram configuré pour cet utilisateur.';
@@ -690,9 +225,9 @@ document.getElementById('telegramModal')?.addEventListener('show.bs.modal', func
         statusEl.className = 'alert alert-warning py-2 small';
         statusEl.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Telegram non configuré.';
     }
+
     statusEl.classList.remove('d-none');
 });
-?>
 </script>
 </body>
 </html>

@@ -9,7 +9,7 @@ $descriptions = ['Achat', 'Paiement', 'Dépense', 'Facture', 'Achat en ligne'];
 for($i=0; $i<50; $i++) {
     $category = $categories[array_rand($categories)];
     $description = $descriptions[array_rand($descriptions)] . ' ' . ($i+1);
-    $amount = rand(1000, 20000); // Random amount between 1000 and 20000 FCFA
+    $amount = rand(1000, 20000);
     $date = date('Y-m-d', strtotime('-' . rand(0, 30) . ' days'));
 
     insertExpense($user_id, [

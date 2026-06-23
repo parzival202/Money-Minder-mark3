@@ -1,188 +1,172 @@
-# MoneyMinder - Gestionnaire Budgétaire Intelligent
+# MoneyMinder
 
-MoneyMinder est une application web PHP moderne pour la gestion budgétaire personnelle. Elle offre un suivi détaillé des dépenses, une gestion intelligente des budgets par catégorie, des alertes automatisées via Telegram, et des rapports visuels pour une meilleure compréhension de vos habitudes financières.
+MoneyMinder est une application PHP/SQLite de gestion budgétaire personnelle avec suivi des dépenses, budgets par catégorie, objectifs d'épargne, administration multi-utilisateur et alertes Telegram.
 
-## 🚀 Fonctionnalités Principales
+## Fonctionnalités
 
-### 💰 Gestion Budgétaire
-- **Budgets par catégorie** : Définissez des limites pour chaque catégorie (Alimentation, Transport, Loisirs, etc.)
-- **Suivi en temps réel** : Visualisez l'utilisation de vos budgets avec des barres de progression colorées
-- **Budget global mensuel** : Fixez un objectif de dépense mensuel global
-- **Épargne automatique** : Catégorie spéciale "Épargne" avec objectif annuel
+- tableau de bord avec indicateurs mensuels, progression des budgets et graphiques ;
+- gestion des dépenses par catégorie ;
+- budgets calculés à partir du profil de l'utilisateur connecté ;
+- objectifs d'épargne et suivi de progression ;
+- alertes applicatives et notifications Telegram ;
+- espace d'administration pour gérer les comptes et la configuration Telegram par utilisateur ;
+- archivage mensuel et historique des cycles.
 
-### 📊 Tableaux de Bord et Rapports
-- **Tableau de bord interactif** : Vue d'ensemble avec statistiques clés
-- **Graphiques visuels** : Répartition des dépenses, évolution temporelle, dépenses hebdomadaires
-- **Rapports détaillés** : Analyse par catégorie et période
-- **Archives mensuelles** : Historique complet des cycles budgétaires (du 27 au 26)
+## Stack
 
-### 🔔 Système d'Alertes Intelligent
-- **Alertes échelonnées** : Système rotatif pour éviter la surcharge de notifications
-- **Alertes immédiates** : Pour les dépassements critiques et objectifs atteints
-- **Notifications Telegram** : Intégration bot Telegram pour recevoir les alertes
-- **Types d'alertes** :
-  - Dépassement de budget (80%, 100%)
-  - Dépenses importantes (>10,000 FCFA)
-  - Limites journalières (>8,000 FCFA, >10,000 FCFA)
-  - Objectifs d'épargne atteints
-  - Inactivité prolongée
-  - Encouragements pour faible dépense
+- PHP 7.4+ ;
+- SQLite ;
+- Bootstrap 5 ;
+- Chart.js ;
+- Font Awesome.
 
-### 🎯 Objectifs d'Épargne
-- **Objectifs personnalisés** : Créez des objectifs d'épargne avec échéances
-- **Suivi de progression** : Barres de progression et calculs automatiques
-- **Conseils personnalisés** : Suggestions de montants mensuels/hebdomadaires
+## Installation locale
 
-### 📱 Interface Utilisateur
-- **Design moderne** : Interface Bootstrap 5 avec thème violet personnalisé
-- **Responsive** : Compatible mobile et desktop
-- **Navigation par onglets** : Dashboard, Budgets, Historique, Rapports, Épargne, Alertes
-- **Filtres avancés** : Recherche et filtrage des dépenses par date, catégorie, montant
+1. Place le projet dans ton dossier web, par exemple `C:\xampp\htdocs\moneyminder`.
+2. Vérifie que PHP a bien les extensions `pdo_sqlite`, `sqlite3` et `mbstring`.
+3. Assure-toi que les dossiers suivants sont accessibles en écriture :
+   - `storage/sessions/`
+   - `data/` si tu conserves une base SQLite dedans
+4. Copie `config.local.example.php` vers `config.local.php` si tu veux une configuration locale non versionnée.
+5. Ouvre l’application via `http://localhost/moneyminder/login.php`.
 
-## 🛠️ Installation et Configuration
+## Configuration
 
-### Prérequis
-- **Serveur web** : Apache/Nginx avec PHP 7.4+
-- **Base de données** : SQLite (inclus)
-- **Extensions PHP** : PDO, PDO_SQLite
-- **Bot Telegram** (optionnel pour les alertes)
+L’application charge :
 
-### Installation Rapide
-1. **Clonez ou téléchargez** les fichiers dans votre répertoire web (ex: `htdocs/moneyminder`)
+- `config/app.php`
+- `config/database.php`
+- `config.local.php` si présent
 
-2. **Permissions** : Assurez-vous que PHP peut écrire dans le dossier `data/`
-   ```bash
-   chmod 755 data/
-   ```
+### Variables utiles
 
-3. **Accès web** : Ouvrez `http://localhost/moneyminder/index.php` dans votre navigateur
+Tu peux définir la configuration sensible soit dans `config.local.php`, soit via variables d’environnement :
 
-4. **Configuration initiale** :
-   - L'application s'initialise automatiquement avec un utilisateur par défaut
-   - Configurez vos budgets via l'onglet "Budgets"
-   - Ajoutez vos premières dépenses
+- `MM_BOT_TOKEN`
+- `MM_CHAT_ID`
+- `MM_CURRENCY`
 
-### Configuration Telegram (Optionnel)
-1. Créez un bot Telegram via [@BotFather](https://t.me/botfather)
-2. Obtenez votre TOKEN_API
-3. Modifiez `telegram_bot.php` :
-   ```php
-   private $botToken = 'VOTRE_TOKEN_API';
-   private $chatId = 'VOTRE_CHAT_ID';
-   ```
+Exemple minimal dans `config.local.php` :
 
-### Configuration des Alertes Automatisées (Windows)
-1. Ouvrez le Planificateur de tâches Windows (`taskschd.msc`)
-2. Créez une nouvelle tâche : "MoneyMinder Alertes"
-3. Configurez pour exécuter quotidiennement, répétition toutes les heures
-4. Programme : `C:\xampp\htdocs\moneyminder\send_alerts.bat`
-
-## 📁 Structure du Projet
-
-```
-moneyminder/
-├── index.php              # Page principale avec interface utilisateur
-├── db.php                 # Configuration base de données et fonctions CRUD
-├── telegram_bot.php       # Gestion des notifications Telegram
-├── send_alerts.php        # Script d'envoi des alertes (planifié)
-├── archives.php           # Interface d'archivage et historique
-├── expenses_filters.js    # Filtres JavaScript pour les dépenses
-├── data/
-│   └── app.db            # Base de données SQLite
-├── api/                   # API REST pour données externes
-│   ├── budget-vs-spent.php
-│   ├── category-distribution.php
-│   ├── expenses-evolution.php
-│   ├── week-expenses.php
-│   └── ...
-├── assets/                # Ressources statiques
-│   ├── logo.png
-│   └── logo2.png
-├── scripts/               # Scripts utilitaires
-└── trigger_*.php          # Scripts de déclenchement d'alertes
-```
-
-## 🗄️ Base de Données
-
-### Tables Principales
-- **users** : Utilisateurs (mode single-user par défaut)
-- **expenses** : Dépenses avec date, catégorie, montant, description
-- **budgets** : Budgets par catégorie
-- **alerts** : Système d'alertes avec statut vu/non-vu
-- **archives** : Archives mensuelles (cycles du 27 au 26)
-- **meta** : Données de configuration
-
-### Archivage Automatique
-- **Cycle budgétaire** : Du 27 du mois au 26 du mois suivant
-- **Déclenchement** : Automatique le 26 à 23h59
-- **Réinitialisation** : Budgets remis à zéro (sauf Épargne)
-- **Notification** : Message Telegram avec résumé
-
-## 🔧 Technologies Utilisées
-
-- **Backend** : PHP 7.4+ avec PDO
-- **Base de données** : SQLite
-- **Frontend** : HTML5, CSS3, JavaScript ES6
-- **Framework CSS** : Bootstrap 5.3
-- **Graphiques** : Chart.js
-- **Icônes** : Font Awesome 6
-- **Notifications** : Bot Telegram API
-
-## 📡 API REST
-
-L'application expose plusieurs endpoints API pour l'intégration :
-
-- `GET /api/budget-vs-spent.php` : Comparaison budget/dépenses
-- `GET /api/category-distribution.php` : Répartition par catégorie
-- `GET /api/expenses-evolution.php` : Évolution des dépenses (30 jours)
-- `GET /api/week-expenses.php` : Dépenses hebdomadaires
-- `GET /api/check_alerts.php` : Vérification des alertes
-
-## 🎨 Personnalisation
-
-### Thème
-Le thème violet peut être modifié dans `index.php` (variables CSS :root)
-
-### Constantes
-Modifiez les constantes dans `db.php` :
 ```php
-define('MONTHLY_SAVING_GOAL', 50000);  // Objectif épargne mensuel
-define('ANNUAL_SAVING_GOAL', 600000);  // Objectif épargne annuel
+<?php
+
+return [
+    'app' => [
+        'currency' => 'FCFA',
+    ],
+    'telegram' => [
+        'bot_token' => 'ton-token',
+        'default_chat_id' => 'ton-chat-id',
+    ],
+];
 ```
 
-## 🐛 Dépannage
+## Structure actuelle
 
-### Problèmes Courants
-- **Base de données inaccessible** : Vérifiez les permissions du dossier `data/`
-- **Alertes non reçues** : Vérifiez la configuration Telegram
-- **Graphiques ne s'affichent pas** : Vérifiez la console navigateur pour les erreurs JavaScript
+```text
+moneyminder/
+├── admin.php
+├── auth.php
+├── db.php
+├── index.php
+├── login.php
+├── send_alerts.php
+├── bootstrap/
+├── app/
+│   ├── Controllers/
+│   ├── Helpers/
+│   ├── Middleware/
+│   ├── Models/
+│   ├── Repositories/
+│   ├── Services/
+│   └── Support/
+├── config/
+├── database/
+├── routes/
+├── storage/
+│   ├── logs/
+│   └── sessions/
+├── views/
+│   ├── layouts/
+│   ├── pages/
+│   └── partials/
+└── archive/
+    └── legacy/
+```
 
-### Logs et Debug
-- Activez les logs PHP pour le débogage
-- Utilisez `debug_db.php` pour inspecter la base de données
-- Vérifiez les logs du Planificateur de tâches Windows
+## Compte administrateur
 
-## 🤝 Contribution
+L’application peut créer un compte par défaut selon l’état de la base. Si un compte admin de démonstration existe encore en environnement réel :
 
-1. Fork le projet
-2. Créez une branche pour votre fonctionnalité (`git checkout -b feature/nouvelle-fonction`)
-3. Committez vos changements (`git commit -am 'Ajout nouvelle fonctionnalité'`)
-4. Pushez vers la branche (`git push origin feature/nouvelle-fonction`)
-5. Ouvrez une Pull Request
+1. connecte-toi ;
+2. change immédiatement son mot de passe ;
+3. vérifie la liste des administrateurs ;
+4. supprime tout compte de démo inutile.
 
-## 📄 Licence
+## Telegram
 
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
+La configuration Telegram peut maintenant être faite depuis l’interface d’administration, utilisateur par utilisateur.
 
-## 🙏 Mention spéciale
+Pour récupérer un `chat_id` :
 
-- Interface inspirée des meilleures pratiques UX/UI
-- Icônes Font Awesome
-- Framework Bootstrap
-- Bibliothèque Chart.js
-- ChatGPT
-- BlackBox Ai
+1. crée un bot via [@BotFather](https://t.me/BotFather) ;
+2. envoie un message au bot ;
+3. ouvre `https://api.telegram.org/botTON_TOKEN/getUpdates` ;
+4. récupère `chat.id`.
 
----
+## Cron Debian 13
 
-**Développé avec ❤️ pour une gestion budgétaire simple et efficace**
+Pour déclencher les alertes côté serveur Debian 13 avec l’utilisateur web :
+
+```bash
+sudo crontab -u www-data -e
+```
+
+Exemple de tâche toutes les 5 minutes :
+
+```cron
+*/5 * * * * /usr/bin/php /var/www/html/moneyminder/send_alerts.php >> /var/www/html/moneyminder/storage/logs/cron_alerts.log 2>&1
+```
+
+À prévoir sur le serveur :
+
+- créer `storage/logs/` si nécessaire ;
+- donner les droits d’écriture à `www-data` ;
+- vérifier aussi les droits sur le dossier de sessions si tu déploies sous Linux.
+
+## Sécurité
+
+- protection CSRF côté formulaires ;
+- validation serveur des saisies principales ;
+- requêtes préparées PDO ;
+- sessions centralisées dans `storage/sessions` ;
+- configuration sensible sortie du code applicatif principal ;
+- scripts legacy/debug déplacés dans `archive/legacy/`.
+
+## Vérifications rapides après installation
+
+- connexion / déconnexion ;
+- ajout, modification et suppression de dépense ;
+- mise à jour des budgets ;
+- affichage du dashboard ;
+- affichage des graphiques ;
+- accès admin ;
+- mise à jour des identifiants admin ;
+- test Telegram si configuré ;
+- exécution manuelle de `send_alerts.php`.
+
+## Fichiers importants
+
+- [index.php](/C:/xampp/htdocs/moneyminder/index.php)
+- [admin.php](/C:/xampp/htdocs/moneyminder/admin.php)
+- [db.php](/C:/xampp/htdocs/moneyminder/db.php)
+- [bootstrap/app.php](/C:/xampp/htdocs/moneyminder/bootstrap/app.php)
+- [app/Services](/C:/xampp/htdocs/moneyminder/app/Services)
+- [app/Repositories](/C:/xampp/htdocs/moneyminder/app/Repositories)
+- [views/partials](/C:/xampp/htdocs/moneyminder/views/partials)
+- [REFACTOR_NOTES.md](/C:/xampp/htdocs/moneyminder/REFACTOR_NOTES.md)
+
+## Refactorisation
+
+Les changements de nettoyage et d’architecture sont documentés dans [REFACTOR_NOTES.md](/C:/xampp/htdocs/moneyminder/REFACTOR_NOTES.md).

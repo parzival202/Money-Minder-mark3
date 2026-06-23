@@ -9,57 +9,39 @@ init_db();
 
 require_once __DIR__ . '/budget_algorithm.php';
 
+$setupService = new App\Services\SetupService();
 $user_id = getCurrentUserId();
-$current_user = fetchUserById($user_id);
-ensureUserBudgetMetaConsistency($user_id);
 
 if (!userNeedsBudgetSetup($user_id)) {
     header('Location: index.php');
     exit;
 }
 
-$template = getBudgetTemplateRatios();
-$sourceBudgets = $template['source_budgets'];
-$sourceMonthlyBudget = array_sum($sourceBudgets);
-$sourceSavings = (float)($sourceBudgets['Épargne'] ?? 0);
-$defaultMonthlyBudget = $sourceMonthlyBudget > 0 ? $sourceMonthlyBudget : 200000;
-$defaultSavings = $sourceSavings > 0 ? $sourceSavings : round($defaultMonthlyBudget * 0.25);
-
 $error = null;
-$submittedMonthlyBudget = isset($_POST['monthly_budget']) ? (float)$_POST['monthly_budget'] : $defaultMonthlyBudget;
-$submittedSavings = isset($_POST['saving_amount']) ? (float)$_POST['saving_amount'] : $defaultSavings;
-$suggestedBudgets = suggestBudgetsFromMonthlyTarget($submittedMonthlyBudget, $submittedSavings);
-        $budgetInputs = $suggestedBudgets;
-
-if (!empty($_POST['budgets']) && is_array($_POST['budgets'])) {
-    foreach ($_POST['budgets'] as $category => $amount) {
-        $budgetInputs[$category] = max((float)$amount, 0);
-    }
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verifyCsrfToken($_POST['csrf_token'] ?? '')) {
         $error = 'Requête invalide. Veuillez réessayer.';
     } else {
-        $monthlyBudget = max((float)($_POST['monthly_budget'] ?? 0), 0);
-        $savingAmount = max((float)($_POST['saving_amount'] ?? 0), 0);
-
-        if ($monthlyBudget <= 0) {
-            $error = 'Veuillez définir un budget mensuel supérieur à 0.';
-        } elseif ($savingAmount > $monthlyBudget) {
-            $error = 'L’épargne ne peut pas dépasser le budget mensuel.';
-        } else {
-            applyOptimalBudgets($user_id, $monthlyBudget, $savingAmount, false);
-            setMeta('monthly_budget', $monthlyBudget, $user_id);
-            header('Location: index.php?budgets_updated=1');
+        $result = $setupService->handleSubmission($user_id, $_POST);
+        if ($result['success']) {
+            header('Location: ' . $result['redirect']);
             exit;
         }
+
+        $error = $result['error'] ?? 'Impossible d’enregistrer la configuration.';
     }
 }
 
+$pageData = $setupService->buildPageData($user_id, $_POST);
+$sourceMonthlyBudget = $pageData['source_monthly_budget'];
+$sourceSavings = $pageData['source_savings'];
+$submittedMonthlyBudget = $pageData['submitted_monthly_budget'];
+$submittedSavings = $pageData['submitted_savings'];
+$budgetInputs = $pageData['budget_inputs'];
 $csrf = generateCsrfToken();
-$currentName = getUserDisplayName($current_user);
-$categoryRatiosJson = json_encode($template['category_ratios'], JSON_UNESCAPED_UNICODE);
+$currentName = $pageData['current_name'];
+$categoryRatiosJson = $pageData['category_ratios_json'];
 ?>
 <!DOCTYPE html>
 <html lang="fr">

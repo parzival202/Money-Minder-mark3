@@ -1,22 +1,10 @@
 <?php
-require_once '../auth.php';
-requireAuth();
-require_once '../db.php';
-
 header('Content-Type: application/json');
+require_once __DIR__ . '/../auth.php';
+requireAuth();
+require_once __DIR__ . '/../db.php';
 
-// Ensure DB is initialized
 init_db();
-
-// Get default user
-$user_id = getCurrentUserId();
-
-// Insert a test alert
-$alert_id = insertAlert($user_id, 'test', 'This is a test alert to verify the red dot badge functionality.');
-
-if ($alert_id) {
-    echo json_encode(['success' => true, 'message' => 'Test alert created successfully', 'alert_id' => $alert_id]);
-} else {
-    echo json_encode(['success' => false, 'message' => 'Failed to create test alert']);
-}
+$service = new App\Services\ApiService();
+echo json_encode($service->triggerTestAlert(getCurrentUserId()));
 ?>

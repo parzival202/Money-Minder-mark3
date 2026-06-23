@@ -3,9 +3,11 @@
 // auth.php - Systeme d'authentification MoneyMinder
 // ============================================================
 
+require_once __DIR__ . '/bootstrap/app.php';
+
 // Demarrage securise de la session
 if (session_status() === PHP_SESSION_NONE) {
-    $sessionPath = __DIR__ . '/data/sessions';
+    $sessionPath = storage_path('sessions');
 
     if (!is_dir($sessionPath)) {
         @mkdir($sessionPath, 0775, true);
@@ -82,10 +84,7 @@ function attemptLogin(string $username, string $password): array {
         ];
     }
 
-    global $pdo;
-    $stmt = $pdo->prepare("SELECT id, username, first_name, last_name, password_hash, is_admin FROM users WHERE username = ?");
-    $stmt->execute([$username]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    $user = (new App\Services\AuthService())->findUserForLogin($username);
 
     if (!$user || !password_verify($password, $user['password_hash'])) {
         recordFailedAttempt($username, $ip);

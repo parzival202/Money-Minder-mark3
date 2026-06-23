@@ -12,21 +12,6 @@ require_once __DIR__ . '/../db.php';
 init_db();
 $user_id = getCurrentUserId();
 
-// =============================
-// Notification et Telegram Bot
-// =============================
-require_once __DIR__ . '/../telegram_bot.php';
-global $__nikolaii;
-if (!isset($__nikolaii)) {
-    $__nikolaii = new Nikolaii();
-}
-
-// Check and send alerts
-checkAndSendAlerts($user_id);
-
-// Fetch updated alerts
-$alerts = fetchAlerts($user_id);
-
-// Return as JSON
-echo json_encode($alerts);
+$service = new App\Services\ApiService();
+echo json_encode($service->checkAlerts($user_id));
 ?>

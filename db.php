@@ -3,23 +3,10 @@
 // db.php — Base de données SQLite + fonctions CRUD
 // ============================================================
 
-define('APP_NAME',           'MoneyMinder');
-define('MONTHLY_SAVING_GOAL', 50000);
-define('ANNUAL_SAVING_GOAL',  600000);
+require_once __DIR__ . '/bootstrap/app.php';
 
-$DB_FILE = __DIR__ . '/data/app.db';
-
-if (!is_dir(dirname($DB_FILE))) {
-    mkdir(dirname($DB_FILE), 0755, true);
-}
-
-try {
-    $pdo = new PDO('sqlite:' . $DB_FILE);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->exec('PRAGMA foreign_keys = ON;');
-} catch (Exception $e) {
-    die('Erreur DB: ' . $e->getMessage());
-}
+$DB_FILE = (string)config('database.path', __DIR__ . '/data/app.db');
+$pdo = App\Support\Database::connection();
 
 // ============================================================
 // INITIALISATION
@@ -156,31 +143,25 @@ function ensure_default_user() {
  * Récupère tous les utilisateurs (pour le panneau admin).
  */
 function fetchAllUsers() {
-    global $pdo;
-    return $pdo->query("SELECT id, username, first_name, last_name, is_admin, created_at FROM users ORDER BY created_at ASC")
-               ->fetchAll(PDO::FETCH_ASSOC);
+    return (new App\Repositories\UserRepository())->all();
 }
 
 /**
  * Crée un nouvel utilisateur. Retourne l'ID ou false si le username existe déjà.
  */
 function createUser($username, $password, $is_admin = 0, $first_name = '', $last_name = '') {
-    global $pdo;
     $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-    try {
-        $pdo->prepare("INSERT INTO users (username, first_name, last_name, password_hash, is_admin) VALUES (?, ?, ?, ?, ?)")
-            ->execute([trim($username), trim($first_name), trim($last_name), $hash, $is_admin ? 1 : 0]);
-        return (int)$pdo->lastInsertId();
-    } catch (Exception $e) {
-        return false; // username already taken
-    }
+    return (new App\Repositories\UserRepository())->create(
+        (string)$username,
+        $hash,
+        (bool)$is_admin,
+        (string)$first_name,
+        (string)$last_name
+    );
 }
 
 function fetchUserById($user_id) {
-    global $pdo;
-    $stmt = $pdo->prepare("SELECT id, username, first_name, last_name, is_admin, created_at FROM users WHERE id = ?");
-    $stmt->execute([$user_id]);
-    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    return (new App\Repositories\UserRepository())->findById((int)$user_id);
 }
 
 function getUserDisplayName($user): string {
@@ -190,30 +171,14 @@ function getUserDisplayName($user): string {
 }
 
 function updateUserAccount($user_id, array $fields) {
-    global $pdo;
-    $allowed = ['username', 'first_name', 'last_name', 'password_hash', 'is_admin'];
-    $sets = [];
-    $params = [];
-    foreach ($fields as $key => $value) {
-        if (!in_array($key, $allowed, true)) continue;
-        $sets[] = $key . ' = ?';
-        $params[] = $value;
-    }
-    if (empty($sets)) return false;
-    $params[] = $user_id;
-    try {
-        return $pdo->prepare("UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
-    } catch (Exception $e) {
-        return false;
-    }
+    return (new App\Repositories\UserRepository())->update((int)$user_id, $fields);
 }
 
 /**
  * Supprime un utilisateur et toutes ses données (CASCADE).
  */
 function deleteUser($user_id) {
-    global $pdo;
-    $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$user_id]);
+    (new App\Repositories\UserRepository())->delete((int)$user_id);
 }
 
 // ============================================================
@@ -256,38 +221,19 @@ function clearLoginAttempts($username) {
 // ============================================================
 
 function insertExpense($userId, $expense) {
-    global $pdo;
-    $pdo->prepare("INSERT INTO expenses (user_id, date, category, description, amount) VALUES (?, ?, ?, ?, ?)")
-        ->execute([$userId, $expense['date'], $expense['category'], $expense['description'] ?? null, $expense['amount']]);
-    return (int)$pdo->lastInsertId();
+    return (new App\Repositories\ExpenseRepository())->create((int)$userId, $expense);
 }
 
 function fetchExpenses($userId, $monthYear = null) {
-    global $pdo;
-    if ($monthYear) {
-        $stmt = $pdo->prepare("SELECT * FROM expenses WHERE user_id = ? AND strftime('%Y-%m', date) = ? ORDER BY date DESC, id DESC");
-        $stmt->execute([$userId, $monthYear]);
-    } else {
-        $stmt = $pdo->prepare("SELECT * FROM expenses WHERE user_id = ? ORDER BY date DESC, id DESC");
-        $stmt->execute([$userId]);
-    }
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return (new App\Repositories\ExpenseRepository())->allForUser((int)$userId, $monthYear ? (string)$monthYear : null);
 }
 
 function updateExpense($userId, $id, $fields) {
-    global $pdo;
-    $sets = []; $params = [];
-    foreach ($fields as $k => $v) { $sets[] = "$k = ?"; $params[] = $v; }
-    if (empty($sets)) return false;
-    $params[] = $id;
-    $params[] = $userId;
-    return $pdo->prepare("UPDATE expenses SET " . implode(', ', $sets) . ", updated_at = datetime('now') WHERE id = ? AND user_id = ?")
-               ->execute($params);
+    return (new App\Repositories\ExpenseRepository())->update((int)$userId, (int)$id, $fields);
 }
 
 function deleteExpense($userId, $id) {
-    global $pdo;
-    return $pdo->prepare("DELETE FROM expenses WHERE id = ? AND user_id = ?")->execute([$id, $userId]);
+    return (new App\Repositories\ExpenseRepository())->delete((int)$userId, (int)$id);
 }
 
 // ============================================================
@@ -295,47 +241,11 @@ function deleteExpense($userId, $id) {
 // ============================================================
 
 function getBudgets($userId) {
-    global $pdo;
-    $stmt = $pdo->prepare("SELECT category, amount FROM budgets WHERE user_id = ?");
-    $stmt->execute([$userId]);
-    $out = [];
-    $savingsAliases = ['Épargne', 'Ã‰pargne', 'Ãƒâ€°pargne', '?pargne', '??pargne', '?????pargne'];
-    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $r) {
-        $category = $r['category'];
-        $amount = (float)$r['amount'];
-        if (in_array($category, $savingsAliases, true)) {
-            $out['Épargne'] = ($out['Épargne'] ?? 0) + $amount;
-            continue;
-        }
-        $out[$category] = $amount;
-    }
-    foreach ($savingsAliases as $alias) {
-        if ($alias !== 'Épargne' && isset($out[$alias])) {
-            unset($out[$alias]);
-        }
-    }
-    return $out;
+    return (new App\Repositories\BudgetRepository())->mapForUser((int)$userId);
 }
 
 function setBudgets($userId, $budgetsAssoc) {
-    global $pdo;
-    $savingsAliases = ['Ã‰pargne', 'Ãƒâ€°pargne', '?pargne', '??pargne', '?????pargne'];
-    foreach ($savingsAliases as $alias) {
-        if (isset($budgetsAssoc[$alias])) {
-            $budgetsAssoc['Épargne'] = ($budgetsAssoc['Épargne'] ?? 0) + (float)$budgetsAssoc[$alias];
-            unset($budgetsAssoc[$alias]);
-        }
-    }
-    $ownsTransaction = !$pdo->inTransaction();
-    if ($ownsTransaction) {
-        $pdo->beginTransaction();
-    }
-    $pdo->prepare("DELETE FROM budgets WHERE user_id = ?")->execute([$userId]);
-    $ins = $pdo->prepare("INSERT INTO budgets (user_id, category, amount) VALUES (?, ?, ?)");
-    foreach ($budgetsAssoc as $cat => $amt) $ins->execute([$userId, $cat, $amt]);
-    if ($ownsTransaction) {
-        $pdo->commit();
-    }
+    (new App\Repositories\BudgetRepository())->replaceForUser((int)$userId, $budgetsAssoc);
     return true;
 }
 
@@ -344,36 +254,23 @@ function setBudgets($userId, $budgetsAssoc) {
 // ============================================================
 
 function insertAlert($userId, $type, $message, $seen = 0) {
-    global $pdo;
-    $pdo->prepare("INSERT INTO alerts (user_id, type, message, seen) VALUES (?, ?, ?, ?)")
-        ->execute([$userId, $type, $message, $seen ? 1 : 0]);
-    return (int)$pdo->lastInsertId();
+    return (new App\Repositories\AlertRepository())->create((int)$userId, (string)$type, (string)$message, (bool)$seen);
 }
 
 function fetchAlerts($userId, $onlyUnseen = false) {
-    global $pdo;
-    if ($onlyUnseen) {
-        $stmt = $pdo->prepare("SELECT * FROM alerts WHERE user_id = ? AND seen = 0 ORDER BY created_at DESC");
-    } else {
-        $stmt = $pdo->prepare("SELECT * FROM alerts WHERE user_id = ? ORDER BY created_at DESC");
-    }
-    $stmt->execute([$userId]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return (new App\Repositories\AlertRepository())->allForUser((int)$userId, (bool)$onlyUnseen);
 }
 
 function markAlertSeen($userId, $alertId) {
-    global $pdo;
-    return $pdo->prepare("UPDATE alerts SET seen = 1 WHERE id = ? AND user_id = ?")->execute([$alertId, $userId]);
+    return (new App\Repositories\AlertRepository())->markSeen((int)$userId, (int)$alertId);
 }
 
 function markAllAlertsSeen($userId) {
-    global $pdo;
-    return $pdo->prepare("UPDATE alerts SET seen = 1 WHERE user_id = ?")->execute([$userId]);
+    return (new App\Repositories\AlertRepository())->markAllSeen((int)$userId);
 }
 
 function clearAllAlerts($userId) {
-    global $pdo;
-    return $pdo->prepare("DELETE FROM alerts WHERE user_id = ?")->execute([$userId]);
+    return (new App\Repositories\AlertRepository())->clearAll((int)$userId);
 }
 
 // ============================================================
@@ -381,16 +278,11 @@ function clearAllAlerts($userId) {
 // ============================================================
 
 function saveArchive($userId, $monthYear, $data, $totalExpenses) {
-    global $pdo;
-    $pdo->prepare("INSERT INTO archives (user_id, month_year, data_json, total_expenses) VALUES (?, ?, ?, ?)")
-        ->execute([$userId, $monthYear, json_encode($data), $totalExpenses]);
+    (new App\Repositories\ArchiveRepository())->save((int)$userId, (string)$monthYear, (array)$data, (float)$totalExpenses);
 }
 
 function fetchArchives($userId) {
-    global $pdo;
-    $stmt = $pdo->prepare("SELECT * FROM archives WHERE user_id = ? ORDER BY month_year DESC");
-    $stmt->execute([$userId]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return (new App\Repositories\ArchiveRepository())->allForUser((int)$userId);
 }
 
 function decodeArchiveData(array $archive): array {
@@ -402,136 +294,19 @@ function decodeArchiveData(array $archive): array {
 }
 
 function getArchiveCycleBounds($referenceDate = 'now'): array {
-    $dt = $referenceDate instanceof DateTime ? clone $referenceDate : new DateTime((string)$referenceDate);
-    $day = (int)$dt->format('d');
-
-    if ($day >= 27) {
-        $start = new DateTime($dt->format('Y-m-27'));
-    } else {
-        $prev = new DateTime($dt->format('Y-m-01'));
-        $prev->modify('-1 month');
-        $start = new DateTime($prev->format('Y-m-27'));
-    }
-
-    $end = (clone $start)->modify('+30 days');
-    return [
-        'start' => $start,
-        'end' => $end,
-        'start_date' => $start->format('Y-m-d'),
-        'end_date' => $end->format('Y-m-d'),
-        'month_year' => $start->format('Y-m'),
-        'legacy_month_year' => $end->format('Y-m'),
-        'display_label' => $start->format('d/m/Y') . ' - ' . $end->format('d/m/Y'),
-    ];
+    return (new App\Services\ArchiveService())->cycleBounds($referenceDate);
 }
 
 function findArchiveForCycle($userId, array $cycle) {
-    global $pdo;
-    $stmt = $pdo->prepare("
-        SELECT * FROM archives
-        WHERE user_id = ?
-          AND month_year IN (?, ?)
-        ORDER BY created_at DESC
-        LIMIT 1
-    ");
-    $stmt->execute([$userId, $cycle['month_year'], $cycle['legacy_month_year']]);
-    $archive = $stmt->fetch(PDO::FETCH_ASSOC);
-    return $archive ?: null;
+    return (new App\Services\ArchiveService())->findForCycle((int)$userId, $cycle);
 }
 
 function archiveCurrentCycle($userId, $referenceDate = 'now'): array {
-    global $pdo;
-
-    $cycle = getArchiveCycleBounds($referenceDate);
-    $existingArchive = findArchiveForCycle($userId, $cycle);
-    if ($existingArchive) {
-        return [
-            'success' => false,
-            'status' => 'already_archived',
-            'message' => 'Cette période est déjà archivée.',
-            'cycle' => $cycle,
-            'archive' => $existingArchive,
-        ];
-    }
-
-    $stmt = $pdo->prepare("
-        SELECT * FROM expenses
-        WHERE user_id = ? AND date >= ? AND date <= ?
-        ORDER BY date DESC, id DESC
-    ");
-    $stmt->execute([$userId, $cycle['start_date'], $cycle['end_date']]);
-    $expenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    if (empty($expenses)) {
-        return [
-            'success' => false,
-            'status' => 'no_expenses',
-            'message' => 'Aucune dépense à archiver pour cette période.',
-            'cycle' => $cycle,
-        ];
-    }
-
-    $budgets = getBudgets($userId);
-    $monthlyBudget = (float)getMeta('monthly_budget', array_sum($budgets), $userId);
-    $totalExpenses = 0.0;
-    foreach ($expenses as $expense) {
-        $totalExpenses += (float)$expense['amount'];
-    }
-
-    $archiveData = [
-        'period_start' => $cycle['start_date'],
-        'period_end' => $cycle['end_date'],
-        'display_label' => $cycle['display_label'],
-        'monthly_budget' => $monthlyBudget,
-        'budgets' => $budgets,
-        'expenses' => $expenses,
-    ];
-
-    $resetBudgets = $budgets;
-    foreach ($resetBudgets as $category => &$amount) {
-        if ($category !== 'Épargne') {
-            $amount = 0;
-        }
-    }
-    unset($amount);
-
-    $pdo->beginTransaction();
-    try {
-        saveArchive($userId, $cycle['month_year'], $archiveData, $totalExpenses);
-        setBudgets($userId, $resetBudgets);
-        $deleteStmt = $pdo->prepare("DELETE FROM expenses WHERE user_id = ? AND date >= ? AND date <= ?");
-        $deleteStmt->execute([$userId, $cycle['start_date'], $cycle['end_date']]);
-        $pdo->commit();
-    } catch (Exception $e) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
-        }
-        return [
-            'success' => false,
-            'status' => 'error',
-            'message' => 'Échec de l’archivage: ' . $e->getMessage(),
-            'cycle' => $cycle,
-        ];
-    }
-
-    return [
-        'success' => true,
-        'status' => 'archived',
-        'message' => 'Période archivée avec succès.',
-        'cycle' => $cycle,
-        'total_expenses' => $totalExpenses,
-        'savings_amount' => (float)($budgets['Épargne'] ?? 0),
-        'monthly_budget' => $monthlyBudget,
-        'budgets' => $budgets,
-        'expenses' => $expenses,
-    ];
+    return (new App\Services\ArchiveService())->archiveCurrentCycle((int)$userId, $referenceDate);
 }
 
 function buildArchiveSummaryMessage(array $archiveResult): string {
-    $cycle = $archiveResult['cycle'];
-    $total = formatCurrency($archiveResult['total_expenses'] ?? 0);
-    $savings = formatCurrency($archiveResult['savings_amount'] ?? 0);
-    return "Mois archivé ! {$cycle['display_label']} : {$total} dépensés, {$savings} épargnés.";
+    return (new App\Services\ArchiveService())->buildSummaryMessage($archiveResult);
 }
 
 // ============================================================
@@ -539,30 +314,19 @@ function buildArchiveSummaryMessage(array $archiveResult): string {
 // ============================================================
 
 function fetchDebts($user_id) {
-    global $pdo;
-    $stmt = $pdo->prepare("SELECT * FROM debts WHERE user_id = ? ORDER BY status ASC, created_at DESC");
-    $stmt->execute([$user_id]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    return (new App\Repositories\DebtRepository())->allForUser((int)$user_id);
 }
 
 function insertDebt($user_id, $label, $total_amount, $note = '') {
-    global $pdo;
-    $pdo->prepare("INSERT INTO debts (user_id, label, total_amount, amount_paid, note) VALUES (?, ?, ?, 0, ?)")
-        ->execute([$user_id, $label, $total_amount, $note]);
-    return (int)$pdo->lastInsertId();
+    return (new App\Repositories\DebtRepository())->create((int)$user_id, (string)$label, (float)$total_amount, (string)$note);
 }
 
 function addDebtPayment($user_id, $debt_id, $payment_amount) {
-    global $pdo;
-    $pdo->prepare("UPDATE debts SET amount_paid = MIN(amount_paid + ?, total_amount) WHERE id = ? AND user_id = ?")
-        ->execute([$payment_amount, $debt_id, $user_id]);
-    $pdo->prepare("UPDATE debts SET status = 'settled' WHERE id = ? AND user_id = ? AND amount_paid >= total_amount")
-        ->execute([$debt_id, $user_id]);
+    (new App\Repositories\DebtRepository())->addPayment((int)$user_id, (int)$debt_id, (float)$payment_amount);
 }
 
 function deleteDebt($user_id, $debt_id) {
-    global $pdo;
-    $pdo->prepare("DELETE FROM debts WHERE id = ? AND user_id = ?")->execute([$debt_id, $user_id]);
+    (new App\Repositories\DebtRepository())->delete((int)$user_id, (int)$debt_id);
 }
 
 // ============================================================
@@ -592,85 +356,23 @@ function setMeta($key, $value, $userId = null) {
 }
 
 function getBudgetTemplateSourceUserId() {
-    global $pdo;
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? LIMIT 1");
-    $stmt->execute(['localuser']);
-    $userId = $stmt->fetchColumn();
-    if ($userId) return (int)$userId;
-    return ensure_default_user();
+    return (new App\Services\BudgetTemplateService())->sourceUserId();
 }
 
 function getBudgetTemplateRatios() {
-    $sourceUserId = getBudgetTemplateSourceUserId();
-    $budgets = getBudgets($sourceUserId);
-
-    if (empty($budgets)) {
-        $budgets = [
-            'Alimentation' => 50000,
-            'Transport' => 30000,
-            'Loisirs/Sortie' => 20000,
-            'Mode' => 15000,
-            'Aide proche' => 10000,
-            'Abonnement mensuel' => 25000,
-            'Épargne' => 50000,
-        ];
-    }
-
-    $savings = max((float)($budgets['Épargne'] ?? 0), 0);
-    $nonSavings = $budgets;
-    unset($nonSavings['Épargne']);
-    $baseTotal = array_sum($nonSavings);
-    if ($baseTotal <= 0) {
-        $baseTotal = 1;
-    }
-
-    $categoryRatios = [];
-    foreach ($nonSavings as $category => $amount) {
-        $categoryRatios[$category] = max((float)$amount, 0) / $baseTotal;
-    }
-
-    return [
-        'source_user_id' => $sourceUserId,
-        'source_budgets' => $budgets,
-        'savings_ratio' => ($baseTotal + $savings) > 0 ? ($savings / ($baseTotal + $savings)) : 0,
-        'category_ratios' => $categoryRatios,
-    ];
+    return (new App\Services\BudgetTemplateService())->ratios();
 }
 
 function suggestBudgetsFromMonthlyTarget(float $monthlyBudget, float $savingsAmount): array {
-    $template = getBudgetTemplateRatios();
-    $allocatable = max($monthlyBudget - $savingsAmount, 0);
-    $budgets = [];
-    $runningTotal = 0;
-    $categoryRatios = $template['category_ratios'];
-    $categories = array_keys($categoryRatios);
-    $lastCategory = end($categories);
-
-    foreach ($categoryRatios as $category => $ratio) {
-        $amount = ($category === $lastCategory)
-            ? max($allocatable - $runningTotal, 0)
-            : round($allocatable * $ratio);
-        $budgets[$category] = (float)$amount;
-        $runningTotal += $amount;
-    }
-
-    $budgets['Épargne'] = max($savingsAmount, 0);
-    return $budgets;
+    return (new App\Services\BudgetTemplateService())->suggestFromMonthlyTarget($monthlyBudget, $savingsAmount);
 }
 
 function userNeedsBudgetSetup(int $userId): bool {
-    $monthlyBudget = (float)getMeta('monthly_budget', 0, $userId);
-    $budgets = getBudgets($userId);
-    return $monthlyBudget <= 0 || empty($budgets);
+    return (new App\Services\BudgetTemplateService())->userNeedsSetup($userId);
 }
 
 function ensureUserBudgetMetaConsistency(int $userId): void {
-    $monthlyBudget = (float)getMeta('monthly_budget', 0, $userId);
-    if ($monthlyBudget > 0) return;
-    $budgets = getBudgets($userId);
-    if (!empty($budgets)) {
-        setMeta('monthly_budget', array_sum($budgets), $userId);
-    }
+    (new App\Services\BudgetTemplateService())->ensureUserBudgetMetaConsistency($userId);
 }
 
 function getContextUserId() {
@@ -694,21 +396,12 @@ function formatCurrency($amount) {
 }
 
 function calculateCategoryExpenses($category, $user_id = null) {
-    global $pdo;
     if ($user_id === null) $user_id = getContextUserId();
-    $stmt = $pdo->prepare("SELECT SUM(amount) FROM expenses WHERE user_id = ? AND category = ?");
-    $stmt->execute([$user_id, $category]);
-    return (float)($stmt->fetchColumn() ?? 0);
+    return (new App\Repositories\ExpenseRepository())->totalForCategory((int)$user_id, (string)$category);
 }
 
 function getPreviousMonthSavings($user_id) {
-    $reference = new DateTime('first day of last month');
-    $archive = findArchiveForCycle($user_id, getArchiveCycleBounds($reference));
-    if ($archive) {
-        $data = decodeArchiveData($archive);
-        if (isset($data['budgets']['Épargne'])) return floatval($data['budgets']['Épargne']);
-    }
-    return 0;
+    return (new App\Services\ArchiveService())->previousMonthSavings((int)$user_id);
 }
 
 function getPeriodRange($date) {
@@ -727,17 +420,19 @@ function getPeriodRange($date) {
 }
 
 function safeQuery($sql, $params = []) {
-    global $pdo;
-    $stmt = $pdo->prepare($sql);
+    $stmt = App\Support\Database::connection()->prepare($sql);
     $stmt->execute($params);
     return $stmt;
 }
 
 function migrateSessionDataToDb($userId) {
-    global $pdo;
-    $c = (int)$pdo->prepare("SELECT COUNT(*) FROM expenses WHERE user_id = ?")
-                  ->execute([$userId]) ? $pdo->query("SELECT COUNT(*) FROM expenses WHERE user_id = $userId")->fetchColumn() : 0;
-    if ($c > 0) return false;
+    $pdo = App\Support\Database::connection();
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM expenses WHERE user_id = ?');
+    $stmt->execute([(int)$userId]);
+    $existingExpenses = (int)$stmt->fetchColumn();
+    if ($existingExpenses > 0) {
+        return false;
+    }
 
     if (session_status() !== PHP_SESSION_ACTIVE) session_start();
     $pdo->beginTransaction();

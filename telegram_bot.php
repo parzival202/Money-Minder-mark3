@@ -3,6 +3,8 @@
 // telegram_bot.php — Bot Nikolaii avec credentials par user
 // ============================================================
 
+require_once __DIR__ . '/config.php';
+
 class Nikolaii {
 
     private array $messages = [

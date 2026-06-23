@@ -1,8 +1,11 @@
-config.php
-data/app.db
-data.sqlite
-todo.md
-data/sessions/
 .env
+config.local.php
+/vendor/
+/backups/
+/storage/logs/*
+/storage/sessions/*
+/data/*.db
+/data/*.sqlite
+/data/sessions/*
+/data.sqlite
 *.log
-*.md
