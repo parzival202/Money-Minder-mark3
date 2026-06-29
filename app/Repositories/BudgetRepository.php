@@ -9,11 +9,13 @@ class BudgetRepository
 {
     private PDO $pdo;
     private \App\Services\BudgetService $budgetService;
+    private CategoryRepository $categories;
 
     public function __construct()
     {
         $this->pdo = Database::connection();
         $this->budgetService = new \App\Services\BudgetService();
+        $this->categories = new CategoryRepository();
     }
 
     public function allForUser(int $userId): array
@@ -41,6 +43,7 @@ class BudgetRepository
         foreach ($budgets as $category => $amount) {
             $insert->execute([$userId, $category, $amount]);
         }
+        $this->categories->syncFromBudgetMap($userId, $budgets);
 
         if ($ownsTransaction) {
             $this->pdo->commit();

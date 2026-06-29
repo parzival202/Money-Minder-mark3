@@ -37,7 +37,8 @@ class ExpenseRepository
     public function create(int $userId, array $expense): int
     {
         $stmt = $this->pdo->prepare(
-            'INSERT INTO expenses (user_id, date, category, description, amount) VALUES (?, ?, ?, ?, ?)'
+            'INSERT INTO expenses (user_id, date, category, description, amount, justification, acknowledged_risk, purchase_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $userId,
@@ -45,6 +46,9 @@ class ExpenseRepository
             $expense['category'],
             $expense['description'] ?? null,
             $expense['amount'],
+            $expense['justification'] ?? '',
+            !empty($expense['acknowledged_risk']) ? 1 : 0,
+            $expense['purchase_type'] ?? 'need',
         ]);
 
         return (int)$this->pdo->lastInsertId();

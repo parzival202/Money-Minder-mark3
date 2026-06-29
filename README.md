@@ -2,6 +2,16 @@
 
 MoneyMinder est une application PHP/SQLite de gestion budgétaire personnelle avec suivi des dépenses, budgets par catégorie, objectifs d'épargne, administration multi-utilisateur et alertes Telegram.
 
+## Philosophie de l'app
+
+MoneyMinder n'est plus seulement un carnet de dépenses après coup.
+L'objectif du produit est de devenir un garde-fou anti-dépenses impulsives :
+
+- freiner les achats non essentiels au mauvais moment ;
+- rendre visible le reste à vivre quotidien ;
+- imposer un check-in budgétaire quotidien ;
+- aider à décider avant d'acheter, pas seulement après.
+
 ## Fonctionnalités
 
 - tableau de bord avec indicateurs mensuels, progression des budgets et graphiques ;
@@ -9,8 +19,72 @@ MoneyMinder est une application PHP/SQLite de gestion budgétaire personnelle av
 - budgets calculés à partir du profil de l'utilisateur connecté ;
 - objectifs d'épargne et suivi de progression ;
 - alertes applicatives et notifications Telegram ;
+- mode strict avec garde-fou comportemental ;
+- check-in quotidien obligatoire ;
+- assistant avant achat avec décision enregistrée ;
+- statut financier du jour en mode feu tricolore ;
 - espace d'administration pour gérer les comptes et la configuration Telegram par utilisateur ;
 - archivage mensuel et historique des cycles.
+
+## Nouveaux modules MoneyGuard
+
+### Mode strict
+
+Le mode strict peut être activé pour un utilisateur afin de :
+
+- surveiller la limite journalière recommandée ;
+- renforcer les avertissements sur les achats non essentiels ;
+- imposer une justification sur les dépenses risquées ;
+- afficher un message de blocage psychologique quand la journée est déjà hors contrôle.
+
+### Reste à vivre
+
+L'application calcule maintenant une vue "reste à vivre" qui prend en compte :
+
+- budget mensuel disponible ;
+- dépenses déjà engagées ;
+- dettes actives ;
+- épargne prévue ;
+- nombre de jours restants dans le cycle ;
+- plafond conseillé par jour.
+
+### Check-in quotidien
+
+Si aucun check-in n'a été fait aujourd'hui, l'application affiche un check-in obligatoire au chargement avec trois cas :
+
+- dépense du jour à ajouter ;
+- journée sans dépense ;
+- dépense oubliée de la veille.
+
+### Assistant avant achat
+
+Le bouton `Je veux acheter quelque chose` permet de saisir :
+
+- montant ;
+- catégorie ;
+- besoin ou envie ;
+- urgence ;
+- description.
+
+L'application renvoie ensuite une recommandation :
+
+- `Autorisé`
+- `À éviter`
+- `Interdit aujourd’hui`
+- `Attends 24h`
+
+## Nouvelles données
+
+Les tables ou extensions suivantes soutiennent le mode MoneyGuard :
+
+- `categories`
+  - `essential` pour distinguer catégories essentielles et non essentielles
+- `daily_checkins`
+- `purchase_decisions`
+- colonnes additionnelles dans `expenses`
+  - `justification`
+  - `acknowledged_risk`
+  - `purchase_type`
 
 ## Stack
 

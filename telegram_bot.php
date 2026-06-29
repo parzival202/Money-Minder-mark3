@@ -85,6 +85,12 @@ class Nikolaii {
             "C'est super ! '{goal_name}' à {percentage}%. 📈 Continue comme ça !",
             "C'est petit à petit que l'oiseau fait son nid.\n'{goal_name}' à {percentage}%. On continue 📈 !",
         ],
+        'money_guard_status' => [
+            "{status_label} aujourd'hui : {message}\nDépensé : {today_spent}\nReste conseillé : {remaining_today}",
+        ],
+        'daily_checkin_reminder' => [
+            "Check-in du jour manquant.\nDis-moi si tu as dépensé aujourd'hui ou si c'était une journée sans dépense.",
+        ],
     ];
 
     // ──────────────────────────────────────────────────────────
@@ -186,7 +192,7 @@ class Nikolaii {
         return ($response !== false && empty($err));
     }
 
-    public function renderTemplate(string $key, array $vars): string {
+    public function renderTemplate(string $key, array $vars = []): string {
         $tpls = $this->messages[$key] ?? ["Alerte : $key"];
         $tpl  = $tpls[array_rand($tpls)];
         foreach ($vars as $k => $v) {
@@ -366,6 +372,30 @@ class Nikolaii {
         ]);
         if ($this->sendMessage($text, $userId)) $this->markAsSent($userId, $sig);
     }
+
+    public function moneyGuardStatus(int $userId, array $guard): void {
+        if (!$this->isConfigured($userId)) return;
+        $sig = $this->createSignature('money_guard_status', ($guard['status'] ?? 'green') . '|' . date('Y-m-d'));
+        if ($this->isAlreadySent($userId, $sig)) return;
+
+        $text = $this->renderTemplate('money_guard_status', [
+            'status_label' => $guard['label'] ?? 'Vert',
+            'message' => $guard['message'] ?? '',
+            'today_spent' => formatCurrency($guard['today_spent'] ?? 0),
+            'remaining_today' => formatCurrency($guard['remaining_today'] ?? 0),
+        ]);
+
+        if ($this->sendMessage($text, $userId)) $this->markAsSent($userId, $sig);
+    }
+
+    public function dailyCheckinReminder(int $userId): void {
+        if (!$this->isConfigured($userId)) return;
+        $sig = $this->createSignature('daily_checkin_reminder', date('Y-m-d'));
+        if ($this->isAlreadySent($userId, $sig)) return;
+
+        $text = $this->renderTemplate('daily_checkin_reminder', []);
+        if ($this->sendMessage($text, $userId)) $this->markAsSent($userId, $sig);
+    }
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -488,6 +518,37 @@ function checkLowSpending(int $userId): void {
     }
 }
 
+function checkMoneyGuardSignals(int $userId): void {
+    global $__nikolaii;
+    $guard = (new App\Services\MoneyGuardService())->evaluate($userId);
+
+    if (in_array($guard['status'] ?? 'green', ['orange', 'red', 'black'], true)) {
+        $__nikolaii->moneyGuardStatus($userId, $guard);
+
+        if (($guard['status'] ?? '') === 'black') {
+            insertAlert(
+                $userId,
+                'money_guard_black',
+                'Mode strict : stop dépenses aujourd’hui. Il te reste ' . formatCurrency($guard['remaining_today'] ?? 0) . '.'
+            );
+        } elseif (($guard['status'] ?? '') === 'red') {
+            insertAlert(
+                $userId,
+                'money_guard_red',
+                'Tu as déjà dépensé ' . formatCurrency($guard['today_spent'] ?? 0) . ' aujourd’hui. Recommandation : aucune dépense loisir.'
+            );
+        }
+    }
+}
+
+function checkDailyCheckinReminder(int $userId): void {
+    global $__nikolaii;
+    $hasCheckin = (new App\Services\DailyCheckinService())->hasTodayCheckin($userId);
+    if (!$hasCheckin) {
+        $__nikolaii->dailyCheckinReminder($userId);
+    }
+}
+
 /**
  * Point d'entrée principal — appelé après chaque action utilisateur.
  * Cooldown global de 2 minutes pour éviter les rafales.
@@ -549,4 +610,8 @@ function checkAndSendAlerts(?int $userId = null): void {
 
     // ── 7. Faibles dépenses (lundi uniquement) ───────────────
     checkLowSpending($userId);
+
+    // ── 8. Statut MoneyGuard / check-in ──────────────────────
+    checkMoneyGuardSignals($userId);
+    checkDailyCheckinReminder($userId);
 }

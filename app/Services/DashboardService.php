@@ -39,6 +39,9 @@ class DashboardService
     {
         $expenses = $this->expenses->allForUser($userId);
         $budgets = $this->budgets->mapForUser($userId);
+        $livingBudget = (new LivingBudgetService())->calculate($userId);
+        $moneyGuard = (new MoneyGuardService())->evaluate($userId);
+        $strictMode = (new StrictModeService())->isEnabled($userId);
 
         if (!isset($budgets['Épargne'])) {
             $budgets['Épargne'] = 50000.0;
@@ -178,6 +181,9 @@ class DashboardService
             'budgetChartLabels' => $budgetChartLabels,
             'budgetChartData' => $budgetChartData,
             'spentChartData' => $spentChartData,
+            'living_budget' => $livingBudget,
+            'money_guard' => $moneyGuard,
+            'strict_mode_enabled' => $strictMode,
         ];
     }
 

@@ -308,3 +308,42 @@
 - la refactorisation est fonctionnellement stabilisée côté structure ;
 - le dépôt est nettement plus maintenable ;
 - les tâches restantes relèvent surtout de l'exploitation, du tri de contenu non applicatif ou d'une future phase de rationalisation complémentaire.
+
+## Phase 10 - Fondations MoneyGuard
+
+### Objectifs
+- transformer le produit en garde-fou anti-dépenses impulsives ;
+- poser les tables et services sans casser les flux historiques ;
+- préparer le branchement progressif du mode strict, du check-in quotidien et de l'assistant avant achat.
+
+### Changements effectués
+- ajout des repositories :
+  - `CategoryRepository`
+  - `DailyCheckinRepository`
+  - `PurchaseDecisionRepository`
+- ajout des services :
+  - `StrictModeService`
+  - `LivingBudgetService`
+  - `DailyCheckinService`
+  - `MoneyGuardService`
+  - `PurchaseAdvisorService`
+- extension du schéma SQLite :
+  - table `categories`
+  - table `daily_checkins`
+  - table `purchase_decisions`
+  - colonnes `expenses.justification`, `expenses.acknowledged_risk`, `expenses.purchase_type`
+- synchronisation automatique des catégories lors des mises à jour de budgets.
+- enrichissement de `DashboardService` avec :
+  - `living_budget`
+  - `money_guard`
+  - `strict_mode_enabled`
+- premier branchement dans `index.php` :
+  - activation/désactivation du mode strict ;
+  - check-in quotidien ;
+  - assistant avant achat ;
+  - justification obligatoire pour les dépenses risquées via revue intermédiaire.
+
+### Effet concret
+- le produit commence à passer d'un suivi passif à un comportement d'aide à la décision ;
+- les nouvelles règles vivent dans des services dédiés, pas dans des blocs inline dispersés ;
+- les prochaines itérations peuvent maintenant affiner l'UX, Telegram et les messages sans reposer le socle métier.

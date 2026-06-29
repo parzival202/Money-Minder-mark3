@@ -88,6 +88,41 @@ function init_db() {
         ip           TEXT NOT NULL,
         attempted_at TEXT DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS categories (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        name       TEXT    NOT NULL,
+        essential  INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT    DEFAULT (datetime('now')),
+        UNIQUE(user_id, name),
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_checkins (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        checkin_date TEXT    NOT NULL,
+        status       TEXT    NOT NULL,
+        note         TEXT    NOT NULL DEFAULT '',
+        created_at   TEXT    DEFAULT (datetime('now')),
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS purchase_decisions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL,
+        amount      REAL    NOT NULL,
+        category_id INTEGER,
+        type        TEXT    NOT NULL DEFAULT 'need',
+        urgency     TEXT    NOT NULL DEFAULT 'faible',
+        description TEXT    NOT NULL DEFAULT '',
+        decision    TEXT    NOT NULL,
+        reason      TEXT    NOT NULL,
+        created_at  TEXT    DEFAULT (datetime('now')),
+        FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE SET NULL
+    );
     ");
 
     // ── Migrations ────────────────────────────────────────────
@@ -109,6 +144,21 @@ function init_db() {
     } catch (Exception $e) {
         // Colonne deja presente - on ignore
     }
+    try {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN justification TEXT NOT NULL DEFAULT ''");
+    } catch (Exception $e) {
+        // Colonne deja presente - on ignore
+    }
+    try {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN acknowledged_risk INTEGER NOT NULL DEFAULT 0");
+    } catch (Exception $e) {
+        // Colonne deja presente - on ignore
+    }
+    try {
+        $pdo->exec("ALTER TABLE expenses ADD COLUMN purchase_type TEXT NOT NULL DEFAULT 'need'");
+    } catch (Exception $e) {
+        // Colonne deja presente - on ignore
+    }
     $admin_count = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE is_admin = 1")->fetchColumn();
     if ($admin_count === 0) {
         $pdo->exec("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users)");
@@ -118,6 +168,19 @@ function init_db() {
     if (!getMeta('db_initialized')) {
         migrateSessionDataToDb(ensure_default_user());
         setMeta('db_initialized', '1');
+    }
+
+    $defaultUserId = ensure_default_user();
+    ensureUserBudgetMetaConsistency($defaultUserId);
+
+    $categoryRepository = new App\Repositories\CategoryRepository();
+    foreach (fetchAllUsers() as $user) {
+        $currentUserId = (int)($user['id'] ?? 0);
+        if ($currentUserId <= 0) {
+            continue;
+        }
+        ensureUserBudgetMetaConsistency($currentUserId);
+        $categoryRepository->syncFromBudgetMap($currentUserId, getBudgets($currentUserId));
     }
 }
 

@@ -28,6 +28,11 @@ if (!isset($__nikolaii)) {
 
 $dashboardService = new App\Services\DashboardService();
 $savingGoalService = new App\Services\SavingGoalService();
+$strictModeService = new App\Services\StrictModeService();
+$dailyCheckinService = new App\Services\DailyCheckinService();
+$purchaseAdvisorService = new App\Services\PurchaseAdvisorService();
+$moneyGuardService = new App\Services\MoneyGuardService();
+$categoryRepository = new App\Repositories\CategoryRepository();
 
 // ============================================================
 // ARCHIVAGE AUTOMATIQUE (26 à 23h59)
@@ -101,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $category    = $_POST['category'];
         $description = trim($_POST['description']);
         $date        = $_POST['date'] ?: date('Y-m-d');
+        $purchaseType = ($_POST['purchase_type'] ?? 'need') === 'want' ? 'want' : 'need';
         $existing    = fetchExpenses($user_id);
         $isDuplicate = false;
         foreach ($existing as $e) {
@@ -110,10 +116,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         if (!$isDuplicate) {
-            insertExpense($user_id, ['date' => $date, 'category' => $category, 'description' => $description, 'amount' => $amount]);
+            $riskReview = $moneyGuardService->requiresJustification($user_id, $category, $amount);
+            if ($riskReview['required'] && empty($_POST['expense_justification'])) {
+                $_SESSION['pending_risky_expense'] = [
+                    'date' => $date,
+                    'category' => $category,
+                    'description' => $description,
+                    'amount' => $amount,
+                    'purchase_type' => $purchaseType,
+                ];
+                header('Location: ' . $_SERVER['PHP_SELF'] . '?risk_review=1');
+                exit;
+            }
+            insertExpense($user_id, [
+                'date' => $date,
+                'category' => $category,
+                'description' => $description,
+                'amount' => $amount,
+                'purchase_type' => $purchaseType,
+                'justification' => trim($_POST['expense_justification'] ?? ''),
+                'acknowledged_risk' => !empty($_POST['acknowledge_risk']) ? 1 : 0,
+            ]);
             checkAndSendAlerts($user_id);
         }
         header('Location: ' . $_SERVER['PHP_SELF'] . '?added=1'); exit;
+    }
+
+    if (isset($_POST['confirm_risky_expense'])) {
+        $pendingExpense = $_SESSION['pending_risky_expense'] ?? null;
+        if ($pendingExpense) {
+            insertExpense($user_id, [
+                'date' => $pendingExpense['date'],
+                'category' => $pendingExpense['category'],
+                'description' => $pendingExpense['description'],
+                'amount' => $pendingExpense['amount'],
+                'purchase_type' => $pendingExpense['purchase_type'] ?? 'want',
+                'justification' => trim($_POST['expense_justification'] ?? ''),
+                'acknowledged_risk' => !empty($_POST['acknowledge_risk']) ? 1 : 0,
+            ]);
+            unset($_SESSION['pending_risky_expense']);
+            checkAndSendAlerts($user_id);
+            header('Location: ' . $_SERVER['PHP_SELF'] . '?added=1&risk_saved=1');
+            exit;
+        }
+    }
+
+    if (isset($_POST['toggle_strict_mode'])) {
+        $strictModeService->setEnabled($user_id, ($_POST['strict_mode_enabled'] ?? '0') === '1');
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?strict_mode_updated=1');
+        exit;
+    }
+
+    if (isset($_POST['daily_checkin_status'])) {
+        if (!$dailyCheckinService->hasTodayCheckin($user_id)) {
+            $dailyCheckinService->createToday(
+                $user_id,
+                trim($_POST['daily_checkin_status']),
+                trim($_POST['daily_checkin_note'] ?? '')
+            );
+        }
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?checkin_done=1');
+        exit;
+    }
+
+    if (isset($_POST['purchase_advisor_submit'])) {
+        $advisorResult = $purchaseAdvisorService->evaluate($user_id, [
+            'amount' => $_POST['advisor_amount'] ?? 0,
+            'category' => $_POST['advisor_category'] ?? '',
+            'type' => $_POST['advisor_type'] ?? 'need',
+            'urgency' => $_POST['advisor_urgency'] ?? 'faible',
+            'description' => $_POST['advisor_description'] ?? '',
+        ], true);
+        $_SESSION['purchase_advisor_result'] = $advisorResult;
+        header('Location: ' . $_SERVER['PHP_SELF'] . '?advisor_done=1');
+        exit;
     }
 
     if (isset($_POST['update_budgets'])) {
@@ -242,6 +318,10 @@ extract($dashboardData, EXTR_OVERWRITE);
 $debts = fetchDebts($user_id);
 $alerts = fetchAlerts($user_id);
 $saving_goals = $savingGoalService->allForUser($user_id);
+$needsDailyCheckin = !$dailyCheckinService->hasTodayCheckin($user_id);
+$pendingRiskyExpense = $_SESSION['pending_risky_expense'] ?? null;
+$purchaseAdvisorResult = $_SESSION['purchase_advisor_result'] ?? null;
+unset($_SESSION['purchase_advisor_result']);
 
 $previous_savings    = getPreviousMonthSavings($user_id);
 $current_savings     = $budgets['Épargne'] ?? 0;
@@ -250,6 +330,7 @@ if ($current_savings < $previous_savings) {
     $ratio = ($previous_savings - $current_savings) / max($previous_savings, 1);
     $savings_badge_class = $ratio > 0.2 ? 'bg-danger' : 'bg-warning';
 }
+$quickDecisionAlert = $purchaseAdvisorResult;
 ?>
 <!DOCTYPE html>
 <html lang="fr">
@@ -824,11 +905,137 @@ document.addEventListener('DOMContentLoaded', () => {
   </form></div>
 </div>
 
+<?php if (!empty($quickDecisionAlert)): ?>
+<div class="container mb-3">
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <i class="fas fa-lightbulb"></i>
+        <div><strong><?php echo htmlspecialchars($quickDecisionAlert['decision']); ?></strong> — <?php echo htmlspecialchars($quickDecisionAlert['reason']); ?></div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- ══════════════════════════════════════════
      JAVASCRIPT
      ══════════════════════════════════════════ -->
+<div class="modal fade" id="dailyCheckinModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Check-in quotidien obligatoire</h5>
+            </div>
+            <div class="modal-body">
+                <p class="fw-semibold">As-tu dépensé aujourd'hui ?</p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" type="submit" name="daily_checkin_status" value="spent_today">Oui, j'ajoute maintenant</button>
+                    <button class="btn btn-outline-success" type="submit" name="daily_checkin_status" value="no_spend_day">Non, journée sans dépense</button>
+                    <button class="btn btn-outline-warning" type="submit" name="daily_checkin_status" value="forgot_yesterday">J'ai oublié une dépense d'hier</button>
+                </div>
+                <div class="mt-3">
+                    <label class="form-label">Note optionnelle</label>
+                    <textarea class="form-control" name="daily_checkin_note" rows="3" placeholder="Contexte du jour, oubli, difficulté, etc."></textarea>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal fade" id="purchaseAdvisorModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Je veux acheter quelque chose</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Montant</label>
+                        <input type="number" class="form-control" name="advisor_amount" min="0" step="1" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Catégorie</label>
+                        <select class="form-select" name="advisor_category" required>
+                            <?php foreach (array_keys($budgets) as $category): ?>
+                                <option value="<?php echo htmlspecialchars($category); ?>"><?php echo htmlspecialchars($category); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Besoin ou envie</label>
+                        <select class="form-select" name="advisor_type">
+                            <option value="need">Besoin</option>
+                            <option value="want">Envie</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Urgence</label>
+                        <select class="form-select" name="advisor_urgency">
+                            <option value="faible">Faible</option>
+                            <option value="moyenne">Moyenne</option>
+                            <option value="élevée">Élevée</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="advisor_description" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-dark" type="submit" name="purchase_advisor_submit" value="1">Analyser l'achat</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php if (!empty($pendingRiskyExpense)): ?>
+<div class="modal fade" id="riskyExpenseReviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Confirmation obligatoire</h5>
+            </div>
+            <div class="modal-body">
+                <p class="fw-semibold">Cette dépense risque de déséquilibrer ton mois. Pourquoi veux-tu vraiment la faire ?</p>
+                <div class="alert alert-warning small">
+                    <strong><?php echo htmlspecialchars($pendingRiskyExpense['category']); ?></strong> —
+                    <?php echo formatCurrency($pendingRiskyExpense['amount']); ?> :
+                    <?php echo htmlspecialchars($pendingRiskyExpense['description'] ?: 'Sans description'); ?>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Justification obligatoire</label>
+                    <textarea class="form-control" name="expense_justification" rows="4" required></textarea>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="acknowledge_risk" value="1" id="ackRisk" required>
+                    <label class="form-check-label" for="ackRisk">J'assume cette dépense malgré l'avertissement</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-danger" type="submit" name="confirm_risky_expense" value="1">Enregistrer quand même</button>
+            </div>
+        </form>
+    </div>
+</div>
+<?php endif; ?>
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const needsDailyCheckin = <?php echo $needsDailyCheckin ? 'true' : 'false'; ?>;
+    if (needsDailyCheckin && typeof bootstrap !== 'undefined') {
+        const checkinModal = document.getElementById('dailyCheckinModal');
+        if (checkinModal) {
+            bootstrap.Modal.getOrCreateInstance(checkinModal, { backdrop: 'static', keyboard: false }).show();
+        }
+    }
+
+    const shouldShowRiskModal = <?php echo !empty($pendingRiskyExpense) ? 'true' : 'false'; ?>;
+    if (shouldShowRiskModal && typeof bootstrap !== 'undefined') {
+        const riskModal = document.getElementById('riskyExpenseReviewModal');
+        if (riskModal) {
+            bootstrap.Modal.getOrCreateInstance(riskModal, { backdrop: 'static', keyboard: false }).show();
+        }
+    }
 
     // Badge alertes non lues
     const alertsTab = document.getElementById('alerts-tab');
