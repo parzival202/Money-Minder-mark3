@@ -176,6 +176,33 @@ function isImpersonating(): bool {
 }
 
 /**
+ * Indique que le compte actif est consulte en lecture seule par un administrateur.
+ * Toute ecriture sur les donnees de l'utilisateur consulte doit etre refusee cote serveur.
+ */
+function isReadOnlyUserView(): bool {
+    return isImpersonating();
+}
+
+/**
+ * Refuse une operation d'ecriture pendant la consultation d'un autre compte.
+ */
+function requireWritableUserContext(bool $json = false): void {
+    if (!isReadOnlyUserView()) {
+        return;
+    }
+
+    http_response_code(403);
+    if ($json) {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'error' => 'Consultation en lecture seule : modification interdite.',
+        ]);
+    }
+    exit;
+}
+
+/**
  * Retourne le username de l'utilisateur impersonne (pour l'afficher dans la banniere).
  */
 function getImpersonatedUsername(): string {

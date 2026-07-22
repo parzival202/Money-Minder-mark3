@@ -6,6 +6,7 @@ header('Content-Type: application/json');
 date_default_timezone_set('Africa/Abidjan');
 require_once __DIR__ . '/../auth.php';
 requireAuth();
+requireWritableUserContext(true);
 
 // Initialisation base de données et utilisateur par défaut
 require_once __DIR__ . '/../db.php';

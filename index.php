@@ -12,8 +12,10 @@ init_db();
 $user_id = getCurrentUserId();       // respecte l'impersonation admin
 $current_user = fetchUserById($user_id);
 $current_user_display_name = getUserDisplayName($current_user);
-ensureUserBudgetMetaConsistency($user_id);
-if (userNeedsBudgetSetup($user_id)) {
+if (!isReadOnlyUserView()) {
+    ensureUserBudgetMetaConsistency($user_id);
+}
+if (!isReadOnlyUserView() && userNeedsBudgetSetup($user_id)) {
     header('Location: setup.php');
     exit;
 }
@@ -42,7 +44,7 @@ $day    = (int)$now->format('d');
 $hour   = (int)$now->format('H');
 $minute = (int)$now->format('i');
 
-if ($day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
+if (!isReadOnlyUserView() && $day == 26 && ($hour > 23 || ($hour == 23 && $minute >= 59))) {
     $archiveResult = archiveCurrentCycle($user_id, $now);
     if ($archiveResult['success']) {
         $__nikolaii->sendMessage(buildArchiveSummaryMessage($archiveResult));
@@ -63,6 +65,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['stop_impersonate'])) {
         unset($_SESSION['impersonate_user_id']);
         header('Location: index.php'); exit;
+    }
+
+    // La consultation d'un autre compte par un administrateur est strictement
+    // en lecture seule. Ce controle serveur protege aussi contre un POST forge.
+    if (isReadOnlyUserView()) {
+        http_response_code(403);
+        $_SESSION['read_only_notice'] = 'Consultation en lecture seule : aucune modification n’a été enregistrée.';
+        header('Location: index.php?read_only=1');
+        exit;
     }
     if (isset($_POST['delete_budget_category'])) {
         $cat = $_POST['delete_budget_category'];
@@ -450,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <?php if (isImpersonating()): ?>
 <div class="bg-warning text-dark text-center py-2" style="font-size:.85rem;font-weight:500;">
     <i class="fas fa-eye me-2"></i>
-    Vous consultez le compte de <strong><?php echo htmlspecialchars(getImpersonatedUsername()); ?></strong>
+    Consultation en lecture seule du compte de <strong><?php echo htmlspecialchars(getImpersonatedUsername()); ?></strong> — aucune modification n’est autorisée.
     <form method="POST" class="d-inline ms-3">
         <input type="hidden" name="csrf_token" value="<?php echo generateCsrfToken(); ?>">
         <button name="stop_impersonate" class="btn btn-sm btn-dark py-0 px-2" style="font-size:.8rem;">
@@ -912,6 +923,18 @@ document.addEventListener('DOMContentLoaded', () => {
         <div><strong><?php echo htmlspecialchars($quickDecisionAlert['decision']); ?></strong> — <?php echo htmlspecialchars($quickDecisionAlert['reason']); ?></div>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form').forEach(function (form) {
+        if (form.querySelector('[name="stop_impersonate"], [name="logout_action"]')) {
+            return;
+        }
+        form.querySelectorAll('input, select, textarea, button').forEach(function (control) {
+            control.disabled = true;
+        });
+    });
+});
+</script>
 <?php endif; ?>
 
 <!-- ══════════════════════════════════════════
